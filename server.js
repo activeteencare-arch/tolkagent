@@ -11,7 +11,6 @@ const { Readable } = require('stream');
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 
 // Audio-upload in geheugen, ruim genoeg voor een spraakbericht.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -27,6 +26,30 @@ if (!API_KEY || !AGENT_ID || !VOICE_ID) {
   console.error('[tolkagent] Vul ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID en ELEVENLABS_VOICE_ID in .env in.');
   process.exit(1);
 }
+
+// ── Toegangsbeveiliging: de tolk privé houden ──
+// Alleen actief als APP_PASSWORD is ingesteld. Dan vraagt de browser om een
+// gebruikersnaam + wachtwoord vóór wie dan ook bij de app of de API komt.
+// Zo kan een vreemde niet zomaar jouw tolk (en je ElevenLabs-tegoed) gebruiken.
+const APP_USER = process.env.APP_USER || 'tolk';
+const APP_PASSWORD = process.env.APP_PASSWORD;
+if (APP_PASSWORD) {
+  app.use((req, res, next) => {
+    const h = req.headers.authorization || '';
+    const sp = h.indexOf(' ');
+    if (sp > 0 && h.slice(0, sp) === 'Basic') {
+      const ontcijferd = Buffer.from(h.slice(sp + 1), 'base64').toString();
+      const i = ontcijferd.indexOf(':');
+      const u = ontcijferd.slice(0, i);
+      const p = ontcijferd.slice(i + 1);
+      if (u === APP_USER && p === APP_PASSWORD) return next();
+    }
+    res.set('WWW-Authenticate', 'Basic realm="Tolkagent"');
+    return res.status(401).send('Authenticatie vereist.');
+  });
+}
+
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Vertaling ──
 // Primair de gratis Google-endpoint, met herhaalpogingen, en een reservedienst
