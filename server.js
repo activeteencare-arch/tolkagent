@@ -8,9 +8,11 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const { Readable } = require('stream');
+const crypto = require('crypto');
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 // Audio-upload in geheugen, ruim genoeg voor een spraakbericht.
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -27,25 +29,59 @@ if (!API_KEY || !AGENT_ID || !VOICE_ID) {
   process.exit(1);
 }
 
-// ── Toegangsbeveiliging: de tolk privé houden ──
-// Alleen actief als APP_PASSWORD is ingesteld. Dan vraagt de browser om een
-// gebruikersnaam + wachtwoord vóór wie dan ook bij de app of de API komt.
-// Zo kan een vreemde niet zomaar jouw tolk (en je ElevenLabs-tegoed) gebruiken.
+// ── Toegangsbeveiliging: de tolk privé houden (cookie-login) ──
+// Bewust GEEN Basic Auth: dat geeft een zwart scherm in een iOS-webapp op het
+// beginscherm. Een inlogpagina die een cookie zet werkt daar wél, en de cookie
+// blijft bewaard zodat je maar één keer hoeft in te loggen.
 const APP_USER = process.env.APP_USER || 'tolk';
 const APP_PASSWORD = process.env.APP_PASSWORD;
+const AUTH_TOKEN = APP_PASSWORD
+  ? crypto.createHash('sha256').update(APP_USER + '|' + APP_PASSWORD + '|tolk-v1').digest('hex')
+  : null;
+
+function cookieGeldig(req) {
+  const c = req.headers.cookie || '';
+  const m = c.match(/(?:^|;\s*)tolk_auth=([^;]+)/);
+  return !!(m && m[1] === AUTH_TOKEN);
+}
+
+function loginPagina(fout) {
+  return `<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d1117"><title>Tolk · inloggen</title>
+<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0d1117;color:#c9d1d9;font-family:-apple-system,'Segoe UI',system-ui,sans-serif;padding:24px}
+.box{background:#161b22;border:1px solid #30363d;border-radius:16px;padding:28px;width:100%;max-width:360px}
+h1{font-size:20px;margin:0 0 4px}p{color:#8b949e;font-size:14px;margin:0 0 8px}
+label{display:block;font-size:12px;color:#8b949e;margin:14px 0 6px}
+input{width:100%;padding:12px;background:#0d1117;border:1px solid #30363d;border-radius:10px;color:#c9d1d9;font-size:16px}
+button{width:100%;margin-top:22px;padding:12px;background:#58a6ff;color:#0d1117;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer}
+.fout{color:#f85149;font-size:13px;margin-top:14px;text-align:center}</style></head>
+<body><form class="box" method="POST" action="/login">
+<h1>🇳🇱 ↔ 🇬🇷 Tolk</h1><p>Log in om de tolk te gebruiken.</p>
+<label>E-mail</label><input name="user" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+<label>Wachtwoord</label><input name="password" type="password" autocomplete="current-password" required>
+<button type="submit">Inloggen</button>
+${fout ? '<div class="fout">' + fout + '</div>' : ''}
+</form></body></html>`;
+}
+
 if (APP_PASSWORD) {
-  app.use((req, res, next) => {
-    const h = req.headers.authorization || '';
-    const sp = h.indexOf(' ');
-    if (sp > 0 && h.slice(0, sp) === 'Basic') {
-      const ontcijferd = Buffer.from(h.slice(sp + 1), 'base64').toString();
-      const i = ontcijferd.indexOf(':');
-      const u = ontcijferd.slice(0, i);
-      const p = ontcijferd.slice(i + 1);
-      if (u === APP_USER && p === APP_PASSWORD) return next();
+  app.get('/login', (req, res) => res.type('html').send(loginPagina('')));
+  app.post('/login', (req, res) => {
+    const u = (req.body.user || '').trim();
+    const p = req.body.password || '';
+    if (u === APP_USER && p === APP_PASSWORD) {
+      res.setHeader('Set-Cookie',
+        `tolk_auth=${AUTH_TOKEN}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`);
+      return res.redirect('/');
     }
-    res.set('WWW-Authenticate', 'Basic realm="Tolkagent"');
-    return res.status(401).send('Authenticatie vereist.');
+    res.status(401).type('html').send(loginPagina('E-mail of wachtwoord klopt niet.'));
+  });
+  app.use((req, res, next) => {
+    if (req.path === '/login') return next();
+    if (cookieGeldig(req)) return next();
+    if ((req.headers.accept || '').includes('text/html')) return res.redirect('/login');
+    return res.status(401).json({ error: 'Niet ingelogd.' });
   });
 }
 

@@ -1,0 +1,12 @@
+{
+  "name": "Tolkagent",
+  "short_name": "Tolk",
+  "description": "NL <-> GR tolk in eigen stem",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "lang": "nl"
+}
