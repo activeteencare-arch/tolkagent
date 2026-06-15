@@ -28,31 +28,28 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 40px 16px 60px;
+      padding: 36px 16px 60px;
     }
 
-    /* ── header ── */
-    .header { text-align: center; margin-bottom: 32px; }
+    .header { text-align: center; margin-bottom: 26px; }
     .header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 6px; }
     .header p  { color: var(--muted); font-size: 14px; }
 
-    /* ── kaart ── */
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 16px;
-      padding: 28px;
+      padding: 26px;
       width: 100%;
       max-width: 560px;
     }
 
-    /* ── tabs ── */
     .tabs {
       display: flex;
       background: var(--surface2);
       border-radius: 10px;
       padding: 4px;
-      margin-bottom: 28px;
+      margin-bottom: 26px;
       gap: 4px;
     }
     .tab {
@@ -73,18 +70,17 @@
       box-shadow: 0 1px 3px rgba(0,0,0,0.5);
     }
 
-    /* ── STEM MODUS ── */
     .mic-wrap {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 18px;
-      margin-bottom: 24px;
+      gap: 16px;
+      margin-bottom: 22px;
     }
 
     .mic-btn {
-      width: 90px;
-      height: 90px;
+      width: 96px;
+      height: 96px;
       border-radius: 50%;
       background: var(--surface2);
       border: 2px solid var(--border);
@@ -94,71 +90,61 @@
       justify-content: center;
       transition: all 0.2s;
     }
-    .mic-btn svg { width: 36px; height: 36px; fill: var(--muted); transition: fill 0.2s; }
+    .mic-btn svg { width: 38px; height: 38px; fill: var(--muted); transition: fill 0.2s; }
     .mic-btn:hover { border-color: var(--accent); }
 
     .mic-btn.listening {
-      border-color: var(--accent);
-      background: rgba(88,166,255,0.08);
-      animation: pulse 1.8s ease-in-out infinite;
+      border-color: var(--red);
+      background: rgba(248,81,73,0.08);
+      animation: pulse 1.6s ease-in-out infinite;
     }
-    .mic-btn.listening svg { fill: var(--accent); }
+    .mic-btn.listening svg { fill: var(--red); }
 
-    .mic-btn.speaking {
-      border-color: var(--green);
-      background: rgba(63,185,80,0.08);
-    }
+    .mic-btn.busy { border-color: var(--accent); }
+    .mic-btn.busy svg { fill: var(--accent); }
+
+    .mic-btn.speaking { border-color: var(--green); background: rgba(63,185,80,0.08); }
     .mic-btn.speaking svg { fill: var(--green); }
 
     .mic-btn.error { border-color: var(--red); }
     .mic-btn.error svg { fill: var(--red); }
 
     @keyframes pulse {
-      0%,100% { box-shadow: 0 0 0 0   rgba(88,166,255,0.4); }
-      50%      { box-shadow: 0 0 0 14px rgba(88,166,255,0);   }
+      0%,100% { box-shadow: 0 0 0 0   rgba(248,81,73,0.4); }
+      50%      { box-shadow: 0 0 0 14px rgba(248,81,73,0);   }
     }
 
-    .status-text { font-size: 13px; color: var(--muted); text-align: center; }
+    .status-text { font-size: 13px; color: var(--muted); text-align: center; min-height: 18px; }
+
+    .upload-row { text-align: center; margin-bottom: 18px; }
+    .upload-label {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-size: 13px; color: var(--accent); cursor: pointer;
+      padding: 8px 14px; border: 1px solid rgba(88,166,255,0.25);
+      background: rgba(88,166,255,0.06); border-radius: 20px;
+    }
+    .upload-label:hover { background: rgba(88,166,255,0.12); }
+    .upload-row input[type=file] { display: none; }
+    .sep { font-size: 12px; color: var(--muted); margin: 12px 0; text-align: center; }
 
     .block {
       background: var(--surface2);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 14px 16px;
-      margin-bottom: 12px;
+      padding: 13px 15px;
+      margin-bottom: 10px;
     }
-    .block:last-child { margin-bottom: 0; }
     .block-label {
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      color: var(--muted);
-      margin-bottom: 7px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.8px; color: var(--muted); margin-bottom: 6px;
     }
     .block-text { font-size: 15px; line-height: 1.55; color: var(--text); }
     .block-text.gr { color: var(--gr-blue); }
 
-    /* ── TEKST MODUS ── */
-    .tekst-wrap { display: flex; flex-direction: column; gap: 14px; }
-
-    textarea {
-      width: 100%;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 16px;
-      color: var(--text);
-      font-size: 15px;
-      line-height: 1.55;
-      font-family: inherit;
-      resize: vertical;
-      min-height: 110px;
-      outline: none;
-      transition: border-color 0.15s;
+    .richting-badge {
+      display: inline-block; font-size: 12px; color: var(--muted);
+      margin-bottom: 12px;
     }
-    textarea:focus { border-color: var(--accent); }
-    textarea::placeholder { color: var(--muted); }
 
     .btn {
       width: 100%;
@@ -172,319 +158,280 @@
       cursor: pointer;
       transition: opacity 0.15s;
     }
-    .btn:hover { opacity: 0.88; }
+    .btn.secondary {
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border); font-size: 13px;
+    }
+    .btn:hover { opacity: 0.9; }
     .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-    audio {
-      width: 100%;
-      margin-top: 12px;
-      border-radius: 8px;
-      accent-color: var(--accent);
-    }
+    audio { width: 100%; margin-top: 12px; border-radius: 8px; accent-color: var(--accent); }
 
-    /* ── fout ── */
     .fout {
-      color: var(--red);
-      font-size: 13px;
-      text-align: center;
-      padding: 8px 0;
-      display: none;
+      color: var(--red); font-size: 13px; text-align: center;
+      padding: 8px 0; display: none;
     }
 
-    /* ── telefoon badge ── */
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 14px;
-      background: rgba(88,166,255,0.08);
-      border: 1px solid rgba(88,166,255,0.25);
-      border-radius: 20px;
-      font-size: 12px;
-      color: var(--accent);
-      margin-top: 22px;
-    }
-
-    .tip { font-size: 12px; color: var(--muted); text-align: center; margin-top: 8px; }
+    .tip { font-size: 12px; color: var(--muted); text-align: center; margin-top: 18px; max-width: 560px; line-height: 1.5; }
   </style>
 </head>
 <body>
 
 <div class="header">
   <h1>🇳🇱 &harr; 🇬🇷 &nbsp;Tolkagent</h1>
-  <p>Nederlands ↔ Grieks · bidirectioneel · jouw stem</p>
+  <p>Nederlands ↔ Grieks · audio in, audio uit · jouw stem</p>
 </div>
 
 <div class="card">
   <div class="tabs">
-    <button id="tab-stem"  class="tab active" onclick="setMode('stem')">🎙&nbsp; Stem</button>
-    <button id="tab-tekst" class="tab"        onclick="setMode('tekst')">✍️&nbsp; Tekst</button>
+    <button id="tab-bericht" class="tab active" onclick="setMode('bericht')">🎙&nbsp; Bericht</button>
+    <button id="tab-live"    class="tab"        onclick="setMode('live')">📞&nbsp; Live gesprek</button>
   </div>
 
-  <!-- ── STEM MODUS ── -->
-  <div id="mode-stem">
+  <!-- ── BERICHT-MODUS (opnemen of uploaden -> vertalen -> audio + delen) ── -->
+  <div id="mode-bericht">
     <div class="mic-wrap">
-      <button class="mic-btn" id="mic-btn" onclick="toggleStem()">
-        <!-- microfoon SVG -->
+      <button class="mic-btn" id="rec-btn" onclick="toggleOpname()" title="Tik om op te nemen">
         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path d="M12 1a4 4 0 0 0-4 4v6a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4zm0 2a2 2 0 0 1 2 2v6a2 2 0 0 1-4 0V5a2 2 0 0 1 2-2zM4 11a8 8 0 0 0 7 7.93V21H8a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2h-3v-2.07A8 8 0 0 0 20 11h-2a6 6 0 0 1-12 0H4z"/>
         </svg>
       </button>
-      <div class="status-text" id="stem-status">Tik om te beginnen · spreek NL of GR</div>
+      <div class="status-text" id="rec-status">Tik en spreek · Nederlands of Grieks</div>
     </div>
 
-    <div class="block">
-      <div class="block-label">Jij</div>
-      <div class="block-text" id="tr-nl">Spreek Nederlands of Grieks…</div>
-    </div>
-    <div class="block">
-      <div class="block-label">Vertaling</div>
-      <div class="block-text gr" id="tr-gr">De vertaling verschijnt hier.</div>
+    <div class="upload-row">
+      <div class="sep">of laad een ontvangen spraakbericht in</div>
+      <label class="upload-label">
+        📎 Kies audiobestand (WhatsApp-spraakbericht)
+        <input type="file" id="audio-upload" accept="audio/*,video/*" onchange="uploadAudio(event)">
+      </label>
     </div>
 
-    <div class="fout" id="stem-fout"></div>
-  </div>
-
-  <!-- ── TEKST MODUS ── -->
-  <div id="mode-tekst" class="tekst-wrap" style="display:none">
-    <div class="tabs" style="margin-bottom:14px">
-      <button id="tab-nl-gr" class="tab active" onclick="setRichting('nl-gr')">🇳🇱 → 🇬🇷</button>
-      <button id="tab-gr-nl" class="tab"        onclick="setRichting('gr-nl')">🇬🇷 → 🇳🇱</button>
-    </div>
-    <textarea id="nl-input" placeholder="Typ hier je Nederlandse tekst… (Ctrl+Enter om te vertalen)" rows="5"></textarea>
-    <button class="btn" id="vertaal-btn" onclick="vertaalTekst()">Vertaal naar Grieks &amp; speel af</button>
-
-    <div class="block" id="tekst-result" style="display:none">
-      <div class="block-label" id="tekst-result-label">Griekse tekst</div>
-      <div class="block-text gr" id="tekst-gr"></div>
+    <div id="bericht-result" style="display:none">
+      <div class="richting-badge" id="richting-badge"></div>
+      <div class="block">
+        <div class="block-label" id="bron-label">Herkend</div>
+        <div class="block-text" id="bron-tekst"></div>
+      </div>
+      <div class="block">
+        <div class="block-label" id="vert-label">Vertaling</div>
+        <div class="block-text gr" id="vert-tekst"></div>
+      </div>
       <audio id="audio-player" controls></audio>
-      <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn" id="deel-btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:13px" onclick="deelAudio()">📤 Deel audio (WhatsApp)</button>
-        <a id="download-btn" class="btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:13px;text-align:center;text-decoration:none;display:none" download="vertaling.mp3">⬇ Download</a>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn secondary" id="deel-btn" onclick="deelAudio()">📤 Deel (WhatsApp)</button>
+        <a id="download-btn" class="btn secondary" style="text-align:center;text-decoration:none;line-height:1.4" download="vertaling.mp3">⬇ Download</a>
       </div>
     </div>
 
-    <div class="fout" id="tekst-fout"></div>
+    <div class="fout" id="bericht-fout"></div>
+  </div>
+
+  <!-- ── LIVE-MODUS (realtime gesprek via ElevenLabs-agent) ── -->
+  <div id="mode-live" style="display:none">
+    <div class="mic-wrap">
+      <button class="mic-btn" id="live-btn" onclick="toggleLive()">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 1a4 4 0 0 0-4 4v6a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4zm0 2a2 2 0 0 1 2 2v6a2 2 0 0 1-4 0V5a2 2 0 0 1 2-2zM4 11a8 8 0 0 0 7 7.93V21H8a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2h-3v-2.07A8 8 0 0 0 20 11h-2a6 6 0 0 1-12 0H4z"/>
+        </svg>
+      </button>
+      <div class="status-text" id="live-status">Tik om een live gesprek te starten</div>
+    </div>
+    <div class="block">
+      <div class="block-label">Jij</div>
+      <div class="block-text" id="live-nl">Spreek Nederlands of Grieks…</div>
+    </div>
+    <div class="block">
+      <div class="block-label">Vertaling</div>
+      <div class="block-text gr" id="live-gr">De vertaling verschijnt hier.</div>
+    </div>
+    <div class="fout" id="live-fout"></div>
   </div>
 </div>
 
-<div class="badge">📞 Telefoongesprekken: Twilio-koppeling — zie setup-instructies</div>
-<p class="tip">Stem-modus: bidirectioneel NL↔GR via jouw ElevenLabs-agent · Tekst-modus: Google Translate + ElevenLabs TTS</p>
+<p class="tip">Audio in jouw stem · spraakherkenning ElevenLabs Scribe · vertaling NL↔GR. Richting wordt automatisch herkend: spreek je Nederlands, dan hoor je Grieks; spreek je Grieks, dan hoor je Nederlands.</p>
 
 <script type="module">
   import { Conversation } from 'https://esm.sh/@elevenlabs/client';
 
   let conv = null;
-  let richting = 'nl-gr'; // 'nl-gr' of 'gr-nl'
+  let mediaRecorder = null;
+  let chunks = [];
+  let huidigAudioBlob = null;
+  let huidigAudioUrl = null;
 
-  // ─── RICHTING (tekst-modus) ──────────────────────────────────────────────────
-  window.setRichting = function(r) {
-    richting = r;
-    const nlGr = r === 'nl-gr';
-    document.getElementById('tab-nl-gr').classList.toggle('active',  nlGr);
-    document.getElementById('tab-gr-nl').classList.toggle('active', !nlGr);
-    const ta = document.getElementById('nl-input');
-    const btn = document.getElementById('vertaal-btn');
-    if (nlGr) {
-      ta.placeholder  = 'Typ hier je Nederlandse tekst… (Ctrl+Enter om te vertalen)';
-      btn.textContent = 'Vertaal naar Grieks & speel af';
-    } else {
-      ta.placeholder  = 'Πληκτρολογήστε ελληνικό κείμενο… (Ctrl+Enter για μετάφραση)';
-      btn.textContent = 'Vertaal naar Nederlands & speel af';
-    }
-    document.getElementById('tekst-result').style.display = 'none';
-  };
+  const taalNaam = { nl: 'Nederlands', el: 'Grieks' };
 
   // ─── MODE ───────────────────────────────────────────────────────────────────
   window.setMode = function(mode) {
-    const isStem = mode === 'stem';
-    document.getElementById('mode-stem').style.display  = isStem ? '' : 'none';
-    document.getElementById('mode-tekst').style.display = isStem ? 'none' : '';
-    document.getElementById('tab-stem').classList.toggle('active',  isStem);
-    document.getElementById('tab-tekst').classList.toggle('active', !isStem);
-    if (!isStem && conv) {
-      conv.endSession().catch(() => {});
-      conv = null;
-      setStemState('stopped');
+    const isBericht = mode === 'bericht';
+    document.getElementById('mode-bericht').style.display = isBericht ? '' : 'none';
+    document.getElementById('mode-live').style.display    = isBericht ? 'none' : '';
+    document.getElementById('tab-bericht').classList.toggle('active',  isBericht);
+    document.getElementById('tab-live').classList.toggle('active',    !isBericht);
+    // stop een lopende opname of live sessie bij wisselen
+    if (!isBericht && mediaRecorder && mediaRecorder.state === 'recording') stopOpname();
+    if (isBericht && conv) { conv.endSession().catch(() => {}); conv = null; setLiveState('stopped'); }
+  };
+
+  // ─── BERICHT: opnemen ─────────────────────────────────────────────────────────
+  function setRecState(state, txt) {
+    const btn = document.getElementById('rec-btn');
+    const st  = document.getElementById('rec-status');
+    btn.className = 'mic-btn' + (state ? ' ' + state : '');
+    if (txt !== undefined) st.textContent = txt;
+  }
+
+  window.toggleOpname = async function() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') { stopOpname(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const type = mediaRecorder.mimeType || 'audio/webm';
+        const blob = new Blob(chunks, { type });
+        const ext = type.includes('mp4') ? 'mp4' : (type.includes('ogg') ? 'ogg' : 'webm');
+        await verwerkAudio(blob, 'opname.' + ext);
+      };
+      mediaRecorder.start();
+      setRecState('listening', 'Aan het opnemen… tik om te stoppen');
+    } catch (e) {
+      setRecState('error', 'Geen toegang tot de microfoon');
     }
   };
 
-  // ─── STEM MODUS ─────────────────────────────────────────────────────────────
-  function setStemState(state, extra) {
-    const btn  = document.getElementById('mic-btn');
-    const stat = document.getElementById('stem-status');
-    const fout = document.getElementById('stem-fout');
-
-    btn.className = 'mic-btn';
-    fout.style.display = 'none';
-
-    const map = {
-      stopped:    { cls: '',          txt: 'Tik om te beginnen' },
-      connecting: { cls: '',          txt: 'Verbinden met ElevenLabs…' },
-      listening:  { cls: 'listening', txt: 'Luistert — spreek Nederlands' },
-      speaking:   { cls: 'speaking',  txt: 'Spreekt Grieks…' },
-      error:      { cls: 'error',     txt: 'Verbinding mislukt — tik opnieuw' },
-    };
-    const s = map[state] || map.stopped;
-    if (s.cls) btn.classList.add(s.cls);
-    stat.textContent = extra || s.txt;
-
-    if (state === 'error' && extra) {
-      fout.textContent = extra;
-      fout.style.display = 'block';
+  function stopOpname() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      setRecState('busy', 'Vertalen…');
+      mediaRecorder.stop();
     }
   }
 
-  window.toggleStem = async function() {
-    if (conv) {
-      try { await conv.endSession(); } catch (_) {}
-      conv = null;
-      setStemState('stopped');
-      return;
-    }
-
-    setStemState('connecting');
-    try {
-      const r = await fetch('/signed-url');
-      if (!r.ok) throw new Error(await r.text());
-      const { signed_url, error } = await r.json();
-      if (error) throw new Error(error);
-
-      conv = await Conversation.startSession({
-        signedUrl: signed_url,
-        connectionType: 'webrtc',
-
-        onModeChange: ({ mode }) => {
-          if (!conv) return;
-          setStemState(mode === 'speaking' ? 'speaking' : 'listening');
-        },
-
-        onStatusChange: ({ status }) => {
-          if (status === 'disconnected') {
-            conv = null;
-            setStemState('stopped');
-          }
-        },
-
-        onMessage: ({ message, source }) => {
-          // bron 'user' = Nederlandse transcriptie, bron 'ai' = Griekse vertaling
-          if (source === 'user' && message) {
-            document.getElementById('tr-nl').textContent = message;
-          } else if (source === 'ai' && message) {
-            document.getElementById('tr-gr').textContent = message;
-          }
-        },
-
-        onError: (err) => {
-          conv = null;
-          const msg = typeof err === 'string' ? err : (err?.message || 'Onbekende fout');
-          setStemState('error', msg);
-        }
-      });
-
-      setStemState('listening');
-
-    } catch (e) {
-      conv = null;
-      setStemState('error', e.message || 'Kon geen verbinding maken.');
-    }
+  // ─── BERICHT: uploaden ──────────────────────────────────────────────────────
+  window.uploadAudio = async function(ev) {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    setRecState('busy', 'Vertalen…');
+    await verwerkAudio(file, file.name || 'bericht');
+    ev.target.value = '';
   };
 
-  // ─── TEKST MODUS ────────────────────────────────────────────────────────────
-  window.vertaalTekst = async function() {
-    const tekst = (document.getElementById('nl-input').value || '').trim();
-    if (!tekst) return;
-
-    const btn     = document.getElementById('vertaal-btn');
-    const fout    = document.getElementById('tekst-fout');
-    const result  = document.getElementById('tekst-result');
-    const label   = document.getElementById('tekst-result-label');
-
-    fout.style.display   = 'none';
+  // ─── BERICHT: naar server, audio terug ──────────────────────────────────────
+  async function verwerkAudio(blob, filename) {
+    const fout   = document.getElementById('bericht-fout');
+    const result = document.getElementById('bericht-result');
+    fout.style.display = 'none';
     result.style.display = 'none';
-    btn.disabled         = true;
-    btn.textContent      = 'Bezig…';
-
-    const vanTaal = richting === 'nl-gr' ? 'nl' : 'el';
-    const naarTaal = richting === 'nl-gr' ? 'el' : 'nl';
-    label.textContent = richting === 'nl-gr' ? 'Griekse tekst' : 'Nederlandse tekst';
 
     try {
-      const res = await fetch('/vertaal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tekst, vanTaal, naarTaal })
-      });
-
+      const fd = new FormData();
+      fd.append('audio', blob, filename);
+      const res = await fetch('/tolk', { method: 'POST', body: fd });
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        throw new Error(errData.error || 'Verzoek mislukt');
+        const e = await res.json().catch(() => ({ error: 'HTTP ' + res.status }));
+        throw new Error(e.error || 'Verzoek mislukt');
       }
 
-      // Griekse tekst uit header lezen (URL-encoded)
-      const grieksTekst = decodeURIComponent(res.headers.get('X-Griekse-Tekst') || '');
-      document.getElementById('tekst-gr').textContent = grieksTekst || '(lege vertaling)';
+      const bron = decodeURIComponent(res.headers.get('X-Bron-Tekst') || '');
+      const vert = decodeURIComponent(res.headers.get('X-Vertaalde-Tekst') || '');
+      const van  = res.headers.get('X-Van-Taal')  || '';
+      const naar = res.headers.get('X-Naar-Taal') || '';
 
-      // Audio afspelen + deel/download klaarzetten
-      const blob  = await res.blob();
-      const url   = URL.createObjectURL(blob);
+      document.getElementById('richting-badge').textContent =
+        (taalNaam[van] || van) + '  →  ' + (taalNaam[naar] || naar);
+      document.getElementById('bron-label').textContent = 'Herkend (' + (taalNaam[van] || van) + ')';
+      document.getElementById('bron-tekst').textContent = bron || '(niets herkend)';
+      document.getElementById('vert-label').textContent = 'Vertaling (' + (taalNaam[naar] || naar) + ')';
+      const vt = document.getElementById('vert-tekst');
+      vt.textContent = vert || '(lege vertaling)';
+      vt.className = 'block-text' + (naar === 'el' ? ' gr' : '');
+
+      const audioBlob = await res.blob();
+      huidigAudioBlob = audioBlob;
+      huidigAudioUrl  = URL.createObjectURL(audioBlob);
       const audio = document.getElementById('audio-player');
-      audio.src   = url;
+      audio.src = huidigAudioUrl;
       audio.play().catch(() => {});
 
-      // Bewaar blob voor delen
-      window._huidigAudioBlob = blob;
-      window._huidigAudioUrl  = url;
+      const dl = document.getElementById('download-btn');
+      dl.href = huidigAudioUrl;
 
-      // Download-link
-      const dlBtn = document.getElementById('download-btn');
-      dlBtn.href  = url;
-      dlBtn.style.display = '';
-
-      // Deel-knop: toon alleen als Web Share API beschikbaar is
       document.getElementById('deel-btn').style.display =
         (navigator.share && navigator.canShare) ? '' : 'none';
 
       result.style.display = '';
-
+      setRecState('', 'Tik en spreek · Nederlands of Grieks');
     } catch (e) {
-      fout.textContent   = e.message;
+      setRecState('error', 'Mislukt');
+      fout.textContent = e.message;
       fout.style.display = 'block';
-    } finally {
-      btn.disabled    = false;
-      btn.textContent = 'Vertaal naar Grieks & speel af';
     }
-  };
+  }
 
-  // ─── DEEL ALS AUDIO ─────────────────────────────────────────────────────────
+  // ─── DELEN ──────────────────────────────────────────────────────────────────
   window.deelAudio = async function() {
-    if (!window._huidigAudioBlob) return;
-    const file = new File([window._huidigAudioBlob], 'vertaling.mp3', { type: 'audio/mpeg' });
+    if (!huidigAudioBlob) return;
+    const file = new File([huidigAudioBlob], 'vertaling.mp3', { type: 'audio/mpeg' });
     try {
       if (navigator.share && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: 'Vertaling',
-        });
+        await navigator.share({ files: [file], title: 'Vertaling' });
       } else {
-        // Fallback: forceer download
         const a = document.createElement('a');
-        a.href     = window._huidigAudioUrl;
-        a.download = 'vertaling.mp3';
-        a.click();
+        a.href = huidigAudioUrl; a.download = 'vertaling.mp3'; a.click();
       }
     } catch (e) {
       if (e.name !== 'AbortError') console.error(e);
     }
   };
 
-  // Ctrl+Enter vertaltt ook vanuit het tekstveld
-  document.getElementById('nl-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && e.ctrlKey) {
-      e.preventDefault();
-      window.vertaalTekst();
+  // ─── LIVE-MODUS ───────────────────────────────────────────────────────────────
+  function setLiveState(state, extra) {
+    const btn  = document.getElementById('live-btn');
+    const stat = document.getElementById('live-status');
+    const fout = document.getElementById('live-fout');
+    btn.className = 'mic-btn';
+    fout.style.display = 'none';
+    const map = {
+      stopped:    { cls: '',          txt: 'Tik om een live gesprek te starten' },
+      connecting: { cls: 'busy',      txt: 'Verbinden…' },
+      listening:  { cls: 'listening', txt: 'Luistert — spreek' },
+      speaking:   { cls: 'speaking',  txt: 'Spreekt de vertaling…' },
+      error:      { cls: 'error',     txt: 'Verbinding mislukt — tik opnieuw' },
+    };
+    const s = map[state] || map.stopped;
+    if (s.cls) btn.classList.add(s.cls);
+    stat.textContent = extra || s.txt;
+    if (state === 'error' && extra) { fout.textContent = extra; fout.style.display = 'block'; }
+  }
+
+  window.toggleLive = async function() {
+    if (conv) { try { await conv.endSession(); } catch (_) {} conv = null; setLiveState('stopped'); return; }
+    setLiveState('connecting');
+    try {
+      const r = await fetch('/signed-url');
+      if (!r.ok) throw new Error(await r.text());
+      const { signed_url, error } = await r.json();
+      if (error) throw new Error(error);
+      conv = await Conversation.startSession({
+        signedUrl: signed_url,
+        connectionType: 'webrtc',
+        onModeChange: ({ mode }) => { if (conv) setLiveState(mode === 'speaking' ? 'speaking' : 'listening'); },
+        onStatusChange: ({ status }) => { if (status === 'disconnected') { conv = null; setLiveState('stopped'); } },
+        onMessage: ({ message, source }) => {
+          if (source === 'user' && message) document.getElementById('live-nl').textContent = message;
+          else if (source === 'ai' && message) document.getElementById('live-gr').textContent = message;
+        },
+        onError: (err) => { conv = null; setLiveState('error', typeof err === 'string' ? err : (err?.message || 'Onbekende fout')); }
+      });
+      setLiveState('listening');
+    } catch (e) {
+      conv = null;
+      setLiveState('error', e.message || 'Kon geen verbinding maken.');
     }
-  });
+  };
 </script>
 </body>
 </html>
