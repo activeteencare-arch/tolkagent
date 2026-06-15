@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tolkagent · NL ↔ GR</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #21262d;
+      --border:    #30363d;
+      --text:      #c9d1d9;
+      --muted:     #8b949e;
+      --accent:    #58a6ff;
+      --green:     #3fb950;
+      --red:       #f85149;
+      --gr-blue:   #79c0ff;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 16px 60px;
+    }
+
+    /* ── header ── */
+    .header { text-align: center; margin-bottom: 32px; }
+    .header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 6px; }
+    .header p  { color: var(--muted); font-size: 14px; }
+
+    /* ── kaart ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      width: 100%;
+      max-width: 560px;
+    }
+
+    /* ── tabs ── */
+    .tabs {
+      display: flex;
+      background: var(--surface2);
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 28px;
+      gap: 4px;
+    }
+    .tab {
+      flex: 1;
+      padding: 9px 12px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab.active {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    }
+
+    /* ── STEM MODUS ── */
+    .mic-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .mic-btn {
+      width: 90px;
+      height: 90px;
+      border-radius: 50%;
+      background: var(--surface2);
+      border: 2px solid var(--border);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .mic-btn svg { width: 36px; height: 36px; fill: var(--muted); transition: fill 0.2s; }
+    .mic-btn:hover { border-color: var(--accent); }
+
+    .mic-btn.listening {
+      border-color: var(--accent);
+      background: rgba(88,166,255,0.08);
+      animation: pulse 1.8s ease-in-out infinite;
+    }
+    .mic-btn.listening svg { fill: var(--accent); }
+
+    .mic-btn.speaking {
+      border-color: var(--green);
+      background: rgba(63,185,80,0.08);
+    }
+    .mic-btn.speaking svg { fill: var(--green); }
+
+    .mic-btn.error { border-color: var(--red); }
+    .mic-btn.error svg { fill: var(--red); }
+
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 0 0   rgba(88,166,255,0.4); }
+      50%      { box-shadow: 0 0 0 14px rgba(88,166,255,0);   }
+    }
+
+    .status-text { font-size: 13px; color: var(--muted); text-align: center; }
+
+    .block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+    }
+    .block:last-child { margin-bottom: 0; }
+    .block-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 7px;
+    }
+    .block-text { font-size: 15px; line-height: 1.55; color: var(--text); }
+    .block-text.gr { color: var(--gr-blue); }
+
+    /* ── TEKST MODUS ── */
+    .tekst-wrap { display: flex; flex-direction: column; gap: 14px; }
+
+    textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.55;
+      font-family: inherit;
+      resize: vertical;
+      min-height: 110px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    textarea:focus { border-color: var(--accent); }
+    textarea::placeholder { color: var(--muted); }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      background: var(--accent);
+      color: #0d1117;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.88; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    audio {
+      width: 100%;
+      margin-top: 12px;
+      border-radius: 8px;
+      accent-color: var(--accent);
+    }
+
+    /* ── fout ── */
+    .fout {
+      color: var(--red);
+      font-size: 13px;
+      text-align: center;
+      padding: 8px 0;
+      display: none;
+    }
+
+    /* ── telefoon badge ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: rgba(88,166,255,0.08);
+      border: 1px solid rgba(88,166,255,0.25);
+      border-radius: 20px;
+      font-size: 12px;
+      color: var(--accent);
+      margin-top: 22px;
+    }
+
+    .tip { font-size: 12px; color: var(--muted); text-align: center; margin-top: 8px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🇳🇱 &harr; 🇬🇷 &nbsp;Tolkagent</h1>
+  <p>Nederlands ↔ Grieks · bidirectioneel · jouw stem</p>
+</div>
+
+<div class="card">
+  <div class="tabs">
+    <button id="tab-stem"  class="tab active" onclick="setMode('stem')">🎙&nbsp; Stem</button>
+    <button id="tab-tekst" class="tab"        onclick="setMode('tekst')">✍️&nbsp; Tekst</button>
+  </div>
+
+  <!-- ── STEM MODUS ── -->
+  <div id="mode-stem">
+    <div class="mic-wrap">
+      <button class="mic-btn" id="mic-btn" onclick="toggleStem()">
+        <!-- microfoon SVG -->
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 1a4 4 0 0 0-4 4v6a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4zm0 2a2 2 0 0 1 2 2v6a2 2 0 0 1-4 0V5a2 2 0 0 1 2-2zM4 11a8 8 0 0 0 7 7.93V21H8a1 1 0 0 0 0 2h8a1 1 0 0 0 0-2h-3v-2.07A8 8 0 0 0 20 11h-2a6 6 0 0 1-12 0H4z"/>
+        </svg>
+      </button>
+      <div class="status-text" id="stem-status">Tik om te beginnen · spreek NL of GR</div>
+    </div>
+
+    <div class="block">
+      <div class="block-label">Jij</div>
+      <div class="block-text" id="tr-nl">Spreek Nederlands of Grieks…</div>
+    </div>
+    <div class="block">
+      <div class="block-label">Vertaling</div>
+      <div class="block-text gr" id="tr-gr">De vertaling verschijnt hier.</div>
+    </div>
+
+    <div class="fout" id="stem-fout"></div>
+  </div>
+
+  <!-- ── TEKST MODUS ── -->
+  <div id="mode-tekst" class="tekst-wrap" style="display:none">
+    <div class="tabs" style="margin-bottom:14px">
+      <button id="tab-nl-gr" class="tab active" onclick="setRichting('nl-gr')">🇳🇱 → 🇬🇷</button>
+      <button id="tab-gr-nl" class="tab"        onclick="setRichting('gr-nl')">🇬🇷 → 🇳🇱</button>
+    </div>
+    <textarea id="nl-input" placeholder="Typ hier je Nederlandse tekst… (Ctrl+Enter om te vertalen)" rows="5"></textarea>
+    <button class="btn" id="vertaal-btn" onclick="vertaalTekst()">Vertaal naar Grieks &amp; speel af</button>
+
+    <div class="block" id="tekst-result" style="display:none">
+      <div class="block-label" id="tekst-result-label">Griekse tekst</div>
+      <div class="block-text gr" id="tekst-gr"></div>
+      <audio id="audio-player" controls></audio>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn" id="deel-btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:13px" onclick="deelAudio()">📤 Deel audio (WhatsApp)</button>
+        <a id="download-btn" class="btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);font-size:13px;text-align:center;text-decoration:none;display:none" download="vertaling.mp3">⬇ Download</a>
+      </div>
+    </div>
+
+    <div class="fout" id="tekst-fout"></div>
+  </div>
+</div>
+
+<div class="badge">📞 Telefoongesprekken: Twilio-koppeling — zie setup-instructies</div>
+<p class="tip">Stem-modus: bidirectioneel NL↔GR via jouw ElevenLabs-agent · Tekst-modus: Google Translate + ElevenLabs TTS</p>
+
+<script type="module">
+  import { Conversation } from 'https://esm.sh/@elevenlabs/client';
+
+  let conv = null;
+  let richting = 'nl-gr'; // 'nl-gr' of 'gr-nl'
+
+  // ─── RICHTING (tekst-modus) ──────────────────────────────────────────────────
+  window.setRichting = function(r) {
+    richting = r;
+    const nlGr = r === 'nl-gr';
+    document.getElementById('tab-nl-gr').classList.toggle('active',  nlGr);
+    document.getElementById('tab-gr-nl').classList.toggle('active', !nlGr);
+    const ta = document.getElementById('nl-input');
+    const btn = document.getElementById('vertaal-btn');
+    if (nlGr) {
+      ta.placeholder  = 'Typ hier je Nederlandse tekst… (Ctrl+Enter om te vertalen)';
+      btn.textContent = 'Vertaal naar Grieks & speel af';
+    } else {
+      ta.placeholder  = 'Πληκτρολογήστε ελληνικό κείμενο… (Ctrl+Enter για μετάφραση)';
+      btn.textContent = 'Vertaal naar Nederlands & speel af';
+    }
+    document.getElementById('tekst-result').style.display = 'none';
+  };
+
+  // ─── MODE ───────────────────────────────────────────────────────────────────
+  window.setMode = function(mode) {
+    const isStem = mode === 'stem';
+    document.getElementById('mode-stem').style.display  = isStem ? '' : 'none';
+    document.getElementById('mode-tekst').style.display = isStem ? 'none' : '';
+    document.getElementById('tab-stem').classList.toggle('active',  isStem);
+    document.getElementById('tab-tekst').classList.toggle('active', !isStem);
+    if (!isStem && conv) {
+      conv.endSession().catch(() => {});
+      conv = null;
+      setStemState('stopped');
+    }
+  };
+
+  // ─── STEM MODUS ─────────────────────────────────────────────────────────────
+  function setStemState(state, extra) {
+    const btn  = document.getElementById('mic-btn');
+    const stat = document.getElementById('stem-status');
+    const fout = document.getElementById('stem-fout');
+
+    btn.className = 'mic-btn';
+    fout.style.display = 'none';
+
+    const map = {
+      stopped:    { cls: '',          txt: 'Tik om te beginnen' },
+      connecting: { cls: '',          txt: 'Verbinden met ElevenLabs…' },
+      listening:  { cls: 'listening', txt: 'Luistert — spreek Nederlands' },
+      speaking:   { cls: 'speaking',  txt: 'Spreekt Grieks…' },
+      error:      { cls: 'error',     txt: 'Verbinding mislukt — tik opnieuw' },
+    };
+    const s = map[state] || map.stopped;
+    if (s.cls) btn.classList.add(s.cls);
+    stat.textContent = extra || s.txt;
+
+    if (state === 'error' && extra) {
+      fout.textContent = extra;
+      fout.style.display = 'block';
+    }
+  }
+
+  window.toggleStem = async function() {
+    if (conv) {
+      try { await conv.endSession(); } catch (_) {}
+      conv = null;
+      setStemState('stopped');
+      return;
+    }
+
+    setStemState('connecting');
+    try {
+      const r = await fetch('/signed-url');
+      if (!r.ok) throw new Error(await r.text());
+      const { signed_url, error } = await r.json();
+      if (error) throw new Error(error);
+
+      conv = await Conversation.startSession({
+        signedUrl: signed_url,
+        connectionType: 'webrtc',
+
+        onModeChange: ({ mode }) => {
+          if (!conv) return;
+          setStemState(mode === 'speaking' ? 'speaking' : 'listening');
+        },
+
+        onStatusChange: ({ status }) => {
+          if (status === 'disconnected') {
+            conv = null;
+            setStemState('stopped');
+          }
+        },
+
+        onMessage: ({ message, source }) => {
+          // bron 'user' = Nederlandse transcriptie, bron 'ai' = Griekse vertaling
+          if (source === 'user' && message) {
+            document.getElementById('tr-nl').textContent = message;
+          } else if (source === 'ai' && message) {
+            document.getElementById('tr-gr').textContent = message;
+          }
+        },
+
+        onError: (err) => {
+          conv = null;
+          const msg = typeof err === 'string' ? err : (err?.message || 'Onbekende fout');
+          setStemState('error', msg);
+        }
+      });
+
+      setStemState('listening');
+
+    } catch (e) {
+      conv = null;
+      setStemState('error', e.message || 'Kon geen verbinding maken.');
+    }
+  };
+
+  // ─── TEKST MODUS ────────────────────────────────────────────────────────────
+  window.vertaalTekst = async function() {
+    const tekst = (document.getElementById('nl-input').value || '').trim();
+    if (!tekst) return;
+
+    const btn     = document.getElementById('vertaal-btn');
+    const fout    = document.getElementById('tekst-fout');
+    const result  = document.getElementById('tekst-result');
+    const label   = document.getElementById('tekst-result-label');
+
+    fout.style.display   = 'none';
+    result.style.display = 'none';
+    btn.disabled         = true;
+    btn.textContent      = 'Bezig…';
+
+    const vanTaal = richting === 'nl-gr' ? 'nl' : 'el';
+    const naarTaal = richting === 'nl-gr' ? 'el' : 'nl';
+    label.textContent = richting === 'nl-gr' ? 'Griekse tekst' : 'Nederlandse tekst';
+
+    try {
+      const res = await fetch('/vertaal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tekst, vanTaal, naarTaal })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(errData.error || 'Verzoek mislukt');
+      }
+
+      // Griekse tekst uit header lezen (URL-encoded)
+      const grieksTekst = decodeURIComponent(res.headers.get('X-Griekse-Tekst') || '');
+      document.getElementById('tekst-gr').textContent = grieksTekst || '(lege vertaling)';
+
+      // Audio afspelen + deel/download klaarzetten
+      const blob  = await res.blob();
+      const url   = URL.createObjectURL(blob);
+      const audio = document.getElementById('audio-player');
+      audio.src   = url;
+      audio.play().catch(() => {});
+
+      // Bewaar blob voor delen
+      window._huidigAudioBlob = blob;
+      window._huidigAudioUrl  = url;
+
+      // Download-link
+      const dlBtn = document.getElementById('download-btn');
+      dlBtn.href  = url;
+      dlBtn.style.display = '';
+
+      // Deel-knop: toon alleen als Web Share API beschikbaar is
+      document.getElementById('deel-btn').style.display =
+        (navigator.share && navigator.canShare) ? '' : 'none';
+
+      result.style.display = '';
+
+    } catch (e) {
+      fout.textContent   = e.message;
+      fout.style.display = 'block';
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = 'Vertaal naar Grieks & speel af';
+    }
+  };
+
+  // ─── DEEL ALS AUDIO ─────────────────────────────────────────────────────────
+  window.deelAudio = async function() {
+    if (!window._huidigAudioBlob) return;
+    const file = new File([window._huidigAudioBlob], 'vertaling.mp3', { type: 'audio/mpeg' });
+    try {
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Vertaling',
+        });
+      } else {
+        // Fallback: forceer download
+        const a = document.createElement('a');
+        a.href     = window._huidigAudioUrl;
+        a.download = 'vertaling.mp3';
+        a.click();
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') console.error(e);
+    }
+  };
+
+  // Ctrl+Enter vertaltt ook vanuit het tekstveld
+  document.getElementById('nl-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.ctrlKey) {
+      e.preventDefault();
+      window.vertaalTekst();
+    }
+  });
+</script>
+</body>
+</html>
