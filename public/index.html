@@ -417,7 +417,7 @@
       if (error) throw new Error(error);
       conv = await Conversation.startSession({
         signedUrl: signed_url,
-        connectionType: 'webrtc',
+        connectionType: 'websocket',
         onModeChange: ({ mode }) => { if (conv) setLiveState(mode === 'speaking' ? 'speaking' : 'listening'); },
         onStatusChange: ({ status }) => { if (status === 'disconnected') { conv = null; setLiveState('stopped'); } },
         onMessage: ({ message, source }) => {

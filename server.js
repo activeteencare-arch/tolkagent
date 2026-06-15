@@ -28,16 +28,43 @@ if (!API_KEY || !AGENT_ID || !VOICE_ID) {
   process.exit(1);
 }
 
-// ── Helper: vertaal tekst via de gratis Google Translate endpoint ──
-async function vertaal(tekst, vanTaal, naarTaal) {
+// ── Vertaling ──
+// Primair de gratis Google-endpoint, met herhaalpogingen, en een reservedienst
+// (MyMemory) als Google hapert. De gratis Google-route geeft af en toe een 500;
+// daarom nooit op één poging vertrouwen voor iets wat moet werken.
+const slaap = ms => new Promise(r => setTimeout(r, ms));
+
+async function vertaalGoogle(tekst, vanTaal, naarTaal) {
   const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${vanTaal}&tl=${naarTaal}&dt=t&q=${encodeURIComponent(tekst)}`;
   const r = await fetch(url);
-  if (!r.ok) throw new Error('Vertaaldienst antwoordde niet: ' + r.status);
+  if (!r.ok) throw new Error('google ' + r.status);
   const data = await r.json();
-  // data[0] is een lijst van [vertaald_segment, origineel_segment, ...]
-  const vertaald = (data[0] || []).map(s => s[0]).join('');
-  if (!vertaald) throw new Error('Lege vertaling teruggekregen.');
-  return vertaald;
+  const out = (data[0] || []).map(s => s[0]).join('');
+  if (!out) throw new Error('google lege vertaling');
+  return out;
+}
+
+async function vertaalMyMemory(tekst, vanTaal, naarTaal) {
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(tekst)}&langpair=${vanTaal}|${naarTaal}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('mymemory ' + r.status);
+  const d = await r.json();
+  const out = d && d.responseData && d.responseData.translatedText;
+  if (!out) throw new Error('mymemory lege vertaling');
+  return out;
+}
+
+async function vertaal(tekst, vanTaal, naarTaal) {
+  let laatste;
+  for (let poging = 0; poging < 3; poging++) {
+    try { return await vertaalGoogle(tekst, vanTaal, naarTaal); }
+    catch (e) { laatste = e; await slaap(250 * (poging + 1)); }
+  }
+  // Reservedienst
+  try { return await vertaalMyMemory(tekst, vanTaal, naarTaal); }
+  catch (e) {
+    throw new Error('Vertaling lukte niet (Google: ' + (laatste && laatste.message) + ', reserve: ' + e.message + ')');
+  }
 }
 
 // ── Helper: tekst naar spraak in Michiels stem, geeft een fetch-Response terug (audio-stream) ──
