@@ -213,6 +213,12 @@
       </label>
     </div>
 
+    <div class="upload-row">
+      <div class="sep">of typ een tekst</div>
+      <textarea id="tekst-invoer" rows="2" placeholder="Typ Nederlands of Grieks…" style="width:100%;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:16px;font-family:inherit;resize:vertical"></textarea>
+      <button class="btn" id="tekst-btn" style="margin-top:10px" onclick="vertaalTekst()">Vertaal & spreek uit</button>
+    </div>
+
     <div id="bericht-result" style="display:none">
       <div class="richting-badge" id="richting-badge"></div>
       <div class="block">
@@ -326,49 +332,47 @@
   };
 
   // ─── BERICHT: naar server, audio terug ──────────────────────────────────────
-  async function verwerkAudio(blob, filename) {
-    const fout   = document.getElementById('bericht-fout');
-    const result = document.getElementById('bericht-result');
-    fout.style.display = 'none';
-    result.style.display = 'none';
+  // Toont een vertaalresultaat (audio + transcripties) uit een serverantwoord.
+  async function toonResultaat(res, bronPrefix) {
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({ error: 'HTTP ' + res.status }));
+      throw new Error(e.error || 'Verzoek mislukt');
+    }
+    const bron = decodeURIComponent(res.headers.get('X-Bron-Tekst') || '');
+    const vert = decodeURIComponent(res.headers.get('X-Vertaalde-Tekst') || '');
+    const van  = res.headers.get('X-Van-Taal')  || '';
+    const naar = res.headers.get('X-Naar-Taal') || '';
 
+    document.getElementById('richting-badge').textContent =
+      (taalNaam[van] || van) + '  →  ' + (taalNaam[naar] || naar);
+    document.getElementById('bron-label').textContent = (bronPrefix || 'Herkend') + ' (' + (taalNaam[van] || van) + ')';
+    document.getElementById('bron-tekst').textContent = bron || '(niets herkend)';
+    document.getElementById('vert-label').textContent = 'Vertaling (' + (taalNaam[naar] || naar) + ')';
+    const vt = document.getElementById('vert-tekst');
+    vt.textContent = vert || '(lege vertaling)';
+    vt.className = 'block-text' + (naar === 'el' ? ' gr' : '');
+
+    const audioBlob = await res.blob();
+    huidigAudioBlob = audioBlob;
+    huidigAudioUrl  = URL.createObjectURL(audioBlob);
+    const audio = document.getElementById('audio-player');
+    audio.src = huidigAudioUrl;
+    audio.play().catch(() => {});
+    document.getElementById('download-btn').href = huidigAudioUrl;
+    document.getElementById('deel-btn').style.display =
+      (navigator.share && navigator.canShare) ? '' : 'none';
+    document.getElementById('bericht-result').style.display = '';
+  }
+
+  async function verwerkAudio(blob, filename) {
+    const fout = document.getElementById('bericht-fout');
+    fout.style.display = 'none';
+    document.getElementById('bericht-result').style.display = 'none';
     try {
       const fd = new FormData();
       fd.append('audio', blob, filename);
       const res = await fetch('/tolk', { method: 'POST', body: fd });
-      if (!res.ok) {
-        const e = await res.json().catch(() => ({ error: 'HTTP ' + res.status }));
-        throw new Error(e.error || 'Verzoek mislukt');
-      }
-
-      const bron = decodeURIComponent(res.headers.get('X-Bron-Tekst') || '');
-      const vert = decodeURIComponent(res.headers.get('X-Vertaalde-Tekst') || '');
-      const van  = res.headers.get('X-Van-Taal')  || '';
-      const naar = res.headers.get('X-Naar-Taal') || '';
-
-      document.getElementById('richting-badge').textContent =
-        (taalNaam[van] || van) + '  →  ' + (taalNaam[naar] || naar);
-      document.getElementById('bron-label').textContent = 'Herkend (' + (taalNaam[van] || van) + ')';
-      document.getElementById('bron-tekst').textContent = bron || '(niets herkend)';
-      document.getElementById('vert-label').textContent = 'Vertaling (' + (taalNaam[naar] || naar) + ')';
-      const vt = document.getElementById('vert-tekst');
-      vt.textContent = vert || '(lege vertaling)';
-      vt.className = 'block-text' + (naar === 'el' ? ' gr' : '');
-
-      const audioBlob = await res.blob();
-      huidigAudioBlob = audioBlob;
-      huidigAudioUrl  = URL.createObjectURL(audioBlob);
-      const audio = document.getElementById('audio-player');
-      audio.src = huidigAudioUrl;
-      audio.play().catch(() => {});
-
-      const dl = document.getElementById('download-btn');
-      dl.href = huidigAudioUrl;
-
-      document.getElementById('deel-btn').style.display =
-        (navigator.share && navigator.canShare) ? '' : 'none';
-
-      result.style.display = '';
+      await toonResultaat(res, 'Herkend');
       setRecState('', 'Tik en spreek · Nederlands of Grieks');
     } catch (e) {
       setRecState('error', 'Mislukt');
@@ -376,6 +380,30 @@
       fout.style.display = 'block';
     }
   }
+
+  window.vertaalTekst = async function() {
+    const fout = document.getElementById('bericht-fout');
+    const tekst = (document.getElementById('tekst-invoer').value || '').trim();
+    fout.style.display = 'none';
+    document.getElementById('bericht-result').style.display = 'none';
+    if (!tekst) { fout.textContent = 'Typ eerst een tekst.'; fout.style.display = 'block'; return; }
+    const btn = document.getElementById('tekst-btn');
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Vertalen…';
+    try {
+      const res = await fetch('/tolk-tekst', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tekst })
+      });
+      await toonResultaat(res, 'Tekst');
+    } catch (e) {
+      fout.textContent = e.message;
+      fout.style.display = 'block';
+    } finally {
+      btn.disabled = false; btn.textContent = orig;
+    }
+  };
 
   // ─── DELEN ──────────────────────────────────────────────────────────────────
   window.deelAudio = async function() {

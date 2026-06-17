@@ -249,7 +249,26 @@ app.post('/tolk', upload.single('audio'), async (req, res) => {
   }
 });
 
-// ── Tekst-modus (fallback): tekst in, audio uit ──
+// ── Tekst-modus: getypte tekst in, vertaalde audio uit ──
+// Richting automatisch: Grieks schrift (alfabet) -> Nederlands, anders Nederlands -> Grieks.
+app.post('/tolk-tekst', async (req, res) => {
+  const tekst = (req.body.tekst || '').trim();
+  if (!tekst) return res.status(400).json({ error: 'Geen tekst meegegeven.' });
+  try {
+    const grieks = /[Ͱ-Ͽ]/.test(tekst);
+    const vanTaal  = grieks ? 'el' : 'nl';
+    const naarTaal = grieks ? 'nl' : 'el';
+    const vertaaldeTekst = await vertaal(tekst, vanTaal, naarTaal);
+    const tts = await spreekUit(vertaaldeTekst);
+    res.setHeader('Content-Type', 'audio/mpeg');
+    zetTekstHeaders(res, tekst, vertaaldeTekst, vanTaal, naarTaal);
+    Readable.fromWeb(tts.body).pipe(res);
+  } catch (e) {
+    if (!res.headersSent) res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Tekst-modus (oud, vaste richting): tekst in, audio uit ──
 app.post('/vertaal', async (req, res) => {
   const { tekst, vanTaal = 'nl', naarTaal = 'el' } = req.body;
   if (!tekst || !tekst.trim()) {
