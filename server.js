@@ -33,16 +33,39 @@ if (!API_KEY || !AGENT_ID || !VOICE_ID) {
 // Bewust GEEN Basic Auth: dat geeft een zwart scherm in een iOS-webapp op het
 // beginscherm. Een inlogpagina die een cookie zet werkt daar wél, en de cookie
 // blijft bewaard zodat je maar één keer hoeft in te loggen.
-const APP_USER = process.env.APP_USER || 'tolk';
-const APP_PASSWORD = process.env.APP_PASSWORD;
-const AUTH_TOKEN = APP_PASSWORD
-  ? crypto.createHash('sha256').update(APP_USER + '|' + APP_PASSWORD + '|tolk-v1').digest('hex')
-  : null;
+// Eén of meer accounts. Wachtwoorden staan altijd in de omgeving (Railway),
+// nooit in de code/repo.
+//   Legacy: APP_USER + APP_PASSWORD  -> één account.
+//   Extra:  APP_ACCOUNTS = JSON-array, bv. [{"user":"naam@mail.nl","password":"geheim"}]
+// Beide mogen samen; alle accounts werken dan.
+function laadAccounts() {
+  const lijst = [];
+  if (process.env.APP_PASSWORD) {
+    lijst.push({ user: process.env.APP_USER || 'tolk', password: process.env.APP_PASSWORD });
+  }
+  if (process.env.APP_ACCOUNTS) {
+    try {
+      const extra = JSON.parse(process.env.APP_ACCOUNTS);
+      if (Array.isArray(extra)) {
+        for (const a of extra) {
+          if (a && a.user && a.password) lijst.push({ user: String(a.user).trim(), password: String(a.password) });
+        }
+      }
+    } catch (e) {
+      console.error('[tolkagent] APP_ACCOUNTS is geen geldige JSON, wordt genegeerd.');
+    }
+  }
+  return lijst;
+}
+const ACCOUNTS = laadAccounts();
+const AUTH_AAN = ACCOUNTS.length > 0;
+const tokenVoor = (u, p) => crypto.createHash('sha256').update(u + '|' + p + '|tolk-v1').digest('hex');
+const GELDIGE_TOKENS = new Set(ACCOUNTS.map(a => tokenVoor(a.user, a.password)));
 
 function cookieGeldig(req) {
   const c = req.headers.cookie || '';
   const m = c.match(/(?:^|;\s*)tolk_auth=([^;]+)/);
-  return !!(m && m[1] === AUTH_TOKEN);
+  return !!(m && GELDIGE_TOKENS.has(m[1]));
 }
 
 function loginPagina(fout) {
@@ -65,14 +88,15 @@ ${fout ? '<div class="fout">' + fout + '</div>' : ''}
 </form></body></html>`;
 }
 
-if (APP_PASSWORD) {
+if (AUTH_AAN) {
   app.get('/login', (req, res) => res.type('html').send(loginPagina('')));
   app.post('/login', (req, res) => {
     const u = (req.body.user || '').trim();
     const p = req.body.password || '';
-    if (u === APP_USER && p === APP_PASSWORD) {
+    const account = ACCOUNTS.find(a => a.user === u && a.password === p);
+    if (account) {
       res.setHeader('Set-Cookie',
-        `tolk_auth=${AUTH_TOKEN}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`);
+        `tolk_auth=${tokenVoor(account.user, account.password)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=31536000`);
       return res.redirect('/');
     }
     res.status(401).type('html').send(loginPagina('E-mail of wachtwoord klopt niet.'));
