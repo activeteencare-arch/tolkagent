@@ -45,11 +45,10 @@ function laadAccounts() {
   }
   if (process.env.APP_ACCOUNTS) {
     try {
-      const extra = JSON.parse(process.env.APP_ACCOUNTS);
-      if (Array.isArray(extra)) {
-        for (const a of extra) {
-          if (a && a.user && a.password) lijst.push({ user: String(a.user).trim(), password: String(a.password) });
-        }
+      let extra = JSON.parse(process.env.APP_ACCOUNTS);
+      if (!Array.isArray(extra)) extra = [extra]; // sta ook één los account-object toe, niet alleen een lijst
+      for (const a of extra) {
+        if (a && a.user && a.password) lijst.push({ user: String(a.user).trim(), password: String(a.password) });
       }
     } catch (e) {
       console.error('[tolkagent] APP_ACCOUNTS is geen geldige JSON, wordt genegeerd.');
@@ -290,30 +289,4 @@ app.post('/tolk-tekst', async (req, res) => {
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: e.message });
   }
-});
-
-// ── Tekst-modus (oud, vaste richting): tekst in, audio uit ──
-app.post('/vertaal', async (req, res) => {
-  const { tekst, vanTaal = 'nl', naarTaal = 'el' } = req.body;
-  if (!tekst || !tekst.trim()) {
-    return res.status(400).json({ error: 'Geen tekst meegegeven.' });
-  }
-  try {
-    const vertaaldeTekst = await vertaal(tekst.trim(), vanTaal, naarTaal);
-    const tts = await spreekUit(vertaaldeTekst);
-    res.setHeader('Content-Type', 'audio/mpeg');
-    zetTekstHeaders(res, tekst.trim(), vertaaldeTekst, vanTaal, naarTaal);
-    // Oude clientversie leest nog X-Griekse-Tekst; meesturen voor compatibiliteit.
-    res.setHeader('X-Griekse-Tekst', encodeURIComponent(vertaaldeTekst));
-    Readable.fromWeb(tts.body).pipe(res);
-  } catch (e) {
-    if (!res.headersSent) res.status(500).json({ error: e.message });
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`\n✓ Tolkagent draait op http://localhost:${PORT}`);
-  console.log(`  Agent : ${AGENT_ID}`);
-  console.log(`  Stem  : ${VOICE_ID}`);
-  console.log(`  STT   : ${STT_MODEL}  TTS: ${TTS_MODEL}\n`);
 });
