@@ -1,7 +1,11 @@
 // tolkagent/server.js
-// NL <-> GR tolk in Michiels gekloonde stem.
+// NL <-> Grieks of Frans tolk in Michiels gekloonde stem.
 // Audio in, audio uit. Spraakherkenning via ElevenLabs Scribe, vertaling via Google Translate,
 // stem via ElevenLabs TTS. Node.js 18+ (native fetch, FormData, Blob, Readable.fromWeb).
+//
+// Partnertaal: Nederlands is altijd de ene kant; de andere kant kiest de gebruiker
+// (Grieks 'el' of Frans 'fr'). De richting binnen dat paar gaat automatisch op de
+// herkende taal. Wil je later nog een taal toevoegen: zet 'm in PARTNERS + TAALNAAM.
 
 require('dotenv').config();
 const express = require('express');
@@ -18,8 +22,16 @@ app.use(express.urlencoded({ extended: false }));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 const API_KEY  = process.env.ELEVENLABS_API_KEY;
-const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;
+const AGENT_ID = process.env.ELEVENLABS_AGENT_ID;        // live-agent Grieks (NL<->GR)
+const AGENT_ID_FR = process.env.ELEVENLABS_AGENT_ID_FR;  // live-agent Frans  (NL<->FR), optioneel
 const VOICE_ID = process.env.ELEVENLABS_VOICE_ID;
+
+// Live-agent per partnertaal. Valt terug op de Griekse agent als er voor een taal
+// (nog) geen aparte agent is ingesteld.
+const LIVE_AGENTS = { el: AGENT_ID, fr: AGENT_ID_FR };
+function liveAgentVoor(partner) {
+  return LIVE_AGENTS[partner] || AGENT_ID;
+}
 const PORT     = process.env.PORT || 3000;
 const STT_MODEL = process.env.ELEVENLABS_STT_MODEL || 'scribe_v1';
 const TTS_MODEL = process.env.ELEVENLABS_TTS_MODEL || 'eleven_flash_v2_5';
@@ -28,82 +40,6 @@ if (!API_KEY || !AGENT_ID || !VOICE_ID) {
   console.error('[tolkagent] Vul ELEVENLABS_API_KEY, ELEVENLABS_AGENT_ID en ELEVENLABS_VOICE_ID in .env in.');
   process.exit(1);
 }
-
-// ── Gratis tekstdemo (geen ElevenLabs, geen credits, geen login) ──
-// Voor de bewijspagina: typ tekst in, krijg de vertaling terug. Alleen de gratis
-// vertaaldienst, geen spraak. Bewust vóór de eventuele login-muur geregistreerd,
-// zodat een uitgelogde bezoeker dit altijd kan openen. Roept vertaal() pas bij een
-// verzoek aan; die functie is dan al geladen.
-function demoPagina() {
-  return `<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#0d1117"><title>Tolk · tekstdemo (NL ↔ GR)</title>
-<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0d1117;color:#c9d1d9;font-family:-apple-system,'Segoe UI',system-ui,sans-serif;padding:24px;display:flex;justify-content:center}
-.wrap{width:100%;max-width:520px}
-h1{font-size:22px;margin:8px 0 4px;text-align:center}
-.sub{color:#8b949e;font-size:14px;margin:0 0 20px;text-align:center}
-.card{background:#161b22;border:1px solid #30363d;border-radius:16px;padding:20px}
-textarea{width:100%;min-height:110px;padding:12px;background:#0d1117;border:1px solid #30363d;border-radius:10px;color:#c9d1d9;font-size:16px;resize:vertical;font-family:inherit}
-button{width:100%;margin-top:14px;padding:12px;background:#58a6ff;color:#0d1117;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer}
-button:disabled{opacity:.6;cursor:default}
-.status{color:#8b949e;font-size:13px;margin-top:12px;min-height:18px;text-align:center}
-.out{margin-top:16px;padding:14px;background:#0d1117;border:1px solid #30363d;border-radius:10px}
-.label{color:#8b949e;font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
-#out{font-size:18px;line-height:1.4;white-space:pre-wrap}
-.note{color:#8b949e;font-size:12px;margin:18px 4px 0;line-height:1.5;text-align:center}</style></head>
-<body><main class="wrap">
-<h1>🇳🇱 ↔ 🇬🇷 Tolk · tekstdemo</h1>
-<p class="sub">Typ Nederlands of Grieks. De richting wordt automatisch herkend.</p>
-<div class="card">
-<textarea id="in" placeholder="Typ Nederlands of Grieks..." maxlength="500"></textarea>
-<button id="go">Vertaal</button>
-<div id="status" class="status"></div>
-<div id="outWrap" class="out" hidden><div class="label" id="outLabel"></div><div id="out"></div></div>
-</div>
-<p class="note">Dit is de gratis tekstdemo. De echte tolk verstaat en spreekt ook, in een echte stem, en werkt met gesproken berichten (ook WhatsApp). Gemaakt door SkillOpsAI.</p>
-</main>
-<script>
-var inEl=document.getElementById('in');
-var out=document.getElementById('out');
-var outWrap=document.getElementById('outWrap');
-var outLabel=document.getElementById('outLabel');
-var statusEl=document.getElementById('status');
-var btn=document.getElementById('go');
-function doeVertaal(){
-  var tekst=inEl.value.trim();
-  if(!tekst){inEl.focus();return;}
-  btn.disabled=true;statusEl.textContent='Bezig met vertalen...';outWrap.hidden=true;
-  fetch('/demo-vertaal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tekst:tekst})})
-    .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
-    .then(function(res){
-      if(!res.ok){throw new Error(res.d.error||'Er ging iets mis.');}
-      outLabel.textContent=(res.d.vanTaal==='el'?'Grieks → Nederlands':'Nederlands → Grieks');
-      out.textContent=res.d.vertaald;
-      outWrap.hidden=false;statusEl.textContent='';
-    })
-    .catch(function(e){statusEl.textContent=e.message;})
-    .then(function(){btn.disabled=false;});
-}
-btn.addEventListener('click',doeVertaal);
-inEl.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){doeVertaal();}});
-</script>
-</body></html>`;
-}
-app.get('/demo', (req, res) => res.type('html').send(demoPagina()));
-app.post('/demo-vertaal', async (req, res) => {
-  const tekst = (req.body.tekst || '').trim();
-  if (!tekst) return res.status(400).json({ error: 'Geen tekst meegegeven.' });
-  if (tekst.length > 500) return res.status(400).json({ error: 'Tekst te lang voor de demo (max 500 tekens).' });
-  try {
-    const grieks = /[Ͱ-Ͽ]/.test(tekst);
-    const vanTaal  = grieks ? 'el' : 'nl';
-    const naarTaal = grieks ? 'nl' : 'el';
-    const vertaaldeTekst = await vertaal(tekst, vanTaal, naarTaal);
-    res.json({ bron: tekst, vertaald: vertaaldeTekst, vanTaal, naarTaal });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
 
 // ── Toegangsbeveiliging: de tolk privé houden (cookie-login) ──
 // Bewust GEEN Basic Auth: dat geeft een zwart scherm in een iOS-webapp op het
@@ -252,11 +188,49 @@ async function spreekUit(tekst) {
   return tts;
 }
 
-// ── Helper: bepaal richting uit een gedetecteerde taalcode ──
-// Scribe geeft ISO-639-1 (nl, el) of soms 639-3 (nld, ell) terug.
+// ── Talen ──
+// Nederlands is vast; de partnertaal kiest de gebruiker.
+const TAALNAAM = { nl: 'Nederlands', el: 'Grieks', fr: 'Frans' };
+const PARTNERS = ['el', 'fr'];
+function geldigePartner(p) {
+  const c = (p || '').toLowerCase();
+  return PARTNERS.includes(c) ? c : 'el'; // standaard Grieks (backwards-compatible)
+}
+
+// Scribe geeft ISO-639-1 (nl, el, fr) of soms 639-3 (nld, ell, fra) terug.
 function isGrieks(code) {
   const c = (code || '').toLowerCase();
   return c.startsWith('el') || c.startsWith('gr'); // el, ell, gre
+}
+// Past een gedetecteerde taalcode bij de partnertaal?
+function codePastBij(code, taal) {
+  const c = (code || '').toLowerCase();
+  if (taal === 'el') return isGrieks(c);
+  if (taal === 'fr') return c.startsWith('fr'); // fr, fra, fre
+  return c.startsWith(taal);
+}
+
+// ── Taaldetectie voor tekst (Grieks via schrift, Frans via Google auto-detect) ──
+async function detecteerGoogle(tekst) {
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=${encodeURIComponent(tekst)}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('detect ' + r.status);
+  const d = await r.json();
+  return (d[2] || '').toLowerCase(); // gedetecteerde brontaal
+}
+// Bepaalt de brontaal van getypte tekst binnen het paar {nl, partner}.
+async function detecteerBron(tekst, partner) {
+  if (partner === 'el') {
+    return /[Ͱ-Ͽ]/.test(tekst) ? 'el' : 'nl'; // Grieks schrift is eenduidig, geen extra call nodig
+  }
+  // Frans (Latijns schrift): vertrouw op Google's detectie, val terug op Nederlands.
+  try {
+    const det = await detecteerGoogle(tekst);
+    if (codePastBij(det, partner)) return partner;
+    return 'nl';
+  } catch (_) {
+    return 'nl';
+  }
 }
 
 // ── Helper: zet vertaalde tekst in een veilige HTTP-header (non-ASCII -> URL-encoded) ──
@@ -270,10 +244,16 @@ function zetTekstHeaders(res, bron, vertaald, vanTaal, naarTaal) {
 }
 
 // ── Stem-modus (live gesprek): signed WebSocket-URL voor de ElevenLabs Conversational AI agent ──
+// Kiest de live-agent op de gekozen partnertaal (Grieks of Frans).
 app.get('/signed-url', async (req, res) => {
+  const partner = geldigePartner(req.query.partner);
+  const agentId = liveAgentVoor(partner);
+  if (!agentId) {
+    return res.status(503).json({ error: 'Voor deze taal is nog geen live-agent ingesteld.' });
+  }
   try {
     const r = await fetch(
-      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${AGENT_ID}`,
+      `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
       { headers: { 'xi-api-key': API_KEY } }
     );
     if (!r.ok) {
@@ -284,6 +264,18 @@ app.get('/signed-url', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Welke partnertalen kent de server (en heeft live-ondersteuning)? ──
+// De frontend gebruikt dit om de live-knop wel/niet aan te bieden per taal.
+app.get('/talen', (req, res) => {
+  res.json({
+    partners: PARTNERS.map(p => ({
+      code: p,
+      naam: TAALNAAM[p],
+      live: !!liveAgentVoor(p)
+    }))
+  });
 });
 
 // ── Tolk-flow (audio in, audio uit) ──
@@ -320,16 +312,17 @@ app.post('/tolk', upload.single('audio'), async (req, res) => {
     }
 
     // ── Stap 2: richting bepalen ──
+    const partner = geldigePartner(req.body.partner);
     let vanTaal, naarTaal;
-    if (req.body.richting === 'nl-gr') {
-      vanTaal = 'nl'; naarTaal = 'el';
-    } else if (req.body.richting === 'gr-nl') {
-      vanTaal = 'el'; naarTaal = 'nl';
+    if (req.body.richting === 'nl-partner' || req.body.richting === 'nl-gr') {
+      vanTaal = 'nl'; naarTaal = partner;
+    } else if (req.body.richting === 'partner-nl' || req.body.richting === 'gr-nl') {
+      vanTaal = partner; naarTaal = 'nl';
     } else {
-      // automatisch op de gedetecteerde taal: Grieks -> Nederlands, anders Nederlands -> Grieks
-      const grieks = isGrieks(stt.language_code);
-      vanTaal  = grieks ? 'el' : 'nl';
-      naarTaal = grieks ? 'nl' : 'el';
+      // automatisch op de gedetecteerde taal: partnertaal -> Nederlands, anders Nederlands -> partnertaal
+      const isPartner = codePastBij(stt.language_code, partner);
+      vanTaal  = isPartner ? partner : 'nl';
+      naarTaal = isPartner ? 'nl' : partner;
     }
 
     // ── Stap 3: vertalen ──
@@ -349,14 +342,14 @@ app.post('/tolk', upload.single('audio'), async (req, res) => {
 });
 
 // ── Tekst-modus: getypte tekst in, vertaalde audio uit ──
-// Richting automatisch: Grieks schrift (alfabet) -> Nederlands, anders Nederlands -> Grieks.
+// Richting automatisch binnen het paar {Nederlands, partnertaal}: herkende partnertaal -> Nederlands, anders Nederlands -> partnertaal.
 app.post('/tolk-tekst', async (req, res) => {
   const tekst = (req.body.tekst || '').trim();
   if (!tekst) return res.status(400).json({ error: 'Geen tekst meegegeven.' });
   try {
-    const grieks = /[Ͱ-Ͽ]/.test(tekst);
-    const vanTaal  = grieks ? 'el' : 'nl';
-    const naarTaal = grieks ? 'nl' : 'el';
+    const partner = geldigePartner(req.body.partner);
+    const vanTaal  = await detecteerBron(tekst, partner);
+    const naarTaal = vanTaal === 'nl' ? partner : 'nl';
     const vertaaldeTekst = await vertaal(tekst, vanTaal, naarTaal);
     const tts = await spreekUit(vertaaldeTekst);
     res.setHeader('Content-Type', 'audio/mpeg');
