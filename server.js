@@ -133,37 +133,79 @@ if (AUTH_AAN) {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ── Vertaalgeschiedenis (per account, op de persistente schijf) ──
-// Opslag per account in een eigen map onder DATA_DIR. Metadata in een JSONL-log,
-// de audio als losse mp3's. DATA_DIR moet op een Railway-Volume staan, anders
-// is de geschiedenis weg bij een redeploy.
-const DATA_DIR  = process.env.DATA_DIR || '/data';
-const GESCH_DIR = path.join(DATA_DIR, 'geschiedenis');
+// ── Vertaalgeschiedenis (per account, in Supabase Storage) ──
+// Alles in één private Storage-bucket, geen database/tabel nodig: per account een
+// index.json (lijst met de metadata) + losse mp3's. Dependency-vrij, via de Supabase
+// REST-API met de service-role-key (alleen server-side, nooit in de client). Staat de
+// Supabase-omgeving niet ingesteld, dan is de geschiedenis uit (de vertaling werkt door).
+// De app maakt de bucket zelf aan bij het opstarten, dus geen handmatige setup nodig.
+const SUPABASE_URL    = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+const SUPABASE_KEY    = process.env.SUPABASE_SERVICE_KEY || '';
+const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET || 'tolk-geschiedenis';
+const GESCH_AAN = !!(SUPABASE_URL && SUPABASE_KEY);
 const veiligId  = id => /^[a-z0-9]+$/i.test(id || '');
 
-const accountMap   = id => path.join(GESCH_DIR, id);
-const logBestand   = id => path.join(accountMap(id), 'log.jsonl');
-const audioMap     = id => path.join(accountMap(id), 'audio');
+function supaHeaders(extra = {}) {
+  return { apikey: SUPABASE_KEY, Authorization: 'Bearer ' + SUPABASE_KEY, ...extra };
+}
+const objectUrl = key => `${SUPABASE_URL}/storage/v1/object/${SUPABASE_BUCKET}/${key}`;
+const indexKey  = acc => `${acc}/index.json`;
+const audioKeyVoor = (acc, id) => `${acc}/audio/${id}.mp3`;
 
-// Sla één vertaling op (metadata + optioneel de mp3). Mag de vertaling nooit breken.
-async function bewaarVertaling(accountId, rec, audioBuffer) {
-  if (!accountId) return null;
+// Zorg dat de private bucket bestaat (idempotent, bij opstart aangeroepen).
+async function zorgBucket() {
+  if (!GESCH_AAN) return;
   try {
-    await fsp.mkdir(audioMap(accountId), { recursive: true });
-    const id = Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
-    let audioBestand = null;
-    if (audioBuffer && audioBuffer.length) {
-      audioBestand = id + '.mp3';
-      await fsp.writeFile(path.join(audioMap(accountId), audioBestand), audioBuffer);
+    const r = await fetch(`${SUPABASE_URL}/storage/v1/bucket`, {
+      method: 'POST',
+      headers: supaHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ id: SUPABASE_BUCKET, name: SUPABASE_BUCKET, public: false })
+    });
+    if (r.ok) console.log('[tolkagent] Supabase-bucket aangemaakt:', SUPABASE_BUCKET);
+    else {
+      const t = await r.text();
+      if (/exist/i.test(t) || r.status === 409) console.log('[tolkagent] Supabase-bucket bestaat al:', SUPABASE_BUCKET);
+      else console.error('[tolkagent] bucket aanmaken gaf:', r.status, t);
     }
-    const regel = {
-      id,
-      ts: new Date().toISOString(),
-      van: rec.van, naar: rec.naar,
-      bron: rec.bron || '', vertaling: rec.vertaling || '',
-      audio: audioBestand
-    };
-    await fsp.appendFile(logBestand(accountId), JSON.stringify(regel) + '\n');
+  } catch (e) { console.error('[tolkagent] zorgBucket fout:', e.message); }
+}
+
+// Lees de index.json van een account (chronologisch opgeslagen). Geeft [] als die er nog niet is.
+async function leesIndex(accountId) {
+  const r = await fetch(objectUrl(indexKey(accountId)), { headers: supaHeaders() });
+  if (r.status === 404 || r.status === 400) return [];
+  if (!r.ok) throw new Error('Supabase index lezen faalde: ' + r.status + ' ' + (await r.text()));
+  try { const j = await r.json(); return Array.isArray(j) ? j : []; } catch { return []; }
+}
+
+async function schrijfIndex(accountId, lijst) {
+  const r = await fetch(objectUrl(indexKey(accountId)), {
+    method: 'POST',
+    headers: supaHeaders({ 'Content-Type': 'application/json', 'x-upsert': 'true' }),
+    body: JSON.stringify(lijst)
+  });
+  if (!r.ok) throw new Error('Supabase index schrijven faalde: ' + r.status + ' ' + (await r.text()));
+}
+
+// Sla één vertaling op (index-regel + optioneel de mp3). Mag de vertaling nooit breken.
+async function bewaarVertaling(accountId, rec, audioBuffer) {
+  if (!accountId || !GESCH_AAN) return null;
+  try {
+    const id = Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
+    let audio = null;
+    if (audioBuffer && audioBuffer.length) {
+      const key = audioKeyVoor(accountId, id);
+      const up = await fetch(objectUrl(key), {
+        method: 'POST',
+        headers: supaHeaders({ 'Content-Type': 'audio/mpeg', 'x-upsert': 'true' }),
+        body: audioBuffer
+      });
+      if (up.ok) audio = key;
+      else console.error('[tolkagent] audio-upload Supabase faalde:', up.status, await up.text());
+    }
+    const lijst = await leesIndex(accountId);
+    lijst.push({ id, ts: new Date().toISOString(), van: rec.van, naar: rec.naar, bron: rec.bron || '', vertaling: rec.vertaling || '', audio });
+    await schrijfIndex(accountId, lijst);
     return id;
   } catch (e) {
     console.error('[tolkagent] opslaan geschiedenis mislukt:', e.message);
@@ -173,34 +215,37 @@ async function bewaarVertaling(accountId, rec, audioBuffer) {
 
 // Lees alle items van een account, nieuwste eerst.
 async function leesGeschiedenis(accountId) {
-  if (!accountId) return [];
-  try {
-    const tekst = await fsp.readFile(logBestand(accountId), 'utf8');
-    const rijen = tekst.split('\n').filter(Boolean)
-      .map(r => { try { return JSON.parse(r); } catch { return null; } })
-      .filter(Boolean);
-    rijen.reverse();
-    return rijen;
-  } catch (e) {
-    if (e.code === 'ENOENT') return [];
-    throw e;
-  }
+  if (!accountId || !GESCH_AAN) return [];
+  const lijst = await leesIndex(accountId);
+  return lijst.slice().reverse();
+}
+
+// Eén item ophalen (voor audio-serving).
+async function leesItem(accountId, id) {
+  if (!accountId || !GESCH_AAN) return null;
+  const lijst = await leesIndex(accountId);
+  return lijst.find(r => r.id === id) || null;
 }
 
 async function verwijderItem(accountId, id) {
-  const rijen = await leesGeschiedenis(accountId);        // nieuwste eerst
-  const teVerwijderen = rijen.find(r => r.id === id);
-  const teHouden = rijen.filter(r => r.id !== id).reverse(); // terug naar chronologisch
-  const inhoud = teHouden.map(r => JSON.stringify(r)).join('\n');
-  await fsp.writeFile(logBestand(accountId), inhoud ? inhoud + '\n' : '');
-  if (teVerwijderen && teVerwijderen.audio) {
-    try { await fsp.unlink(path.join(audioMap(accountId), teVerwijderen.audio)); } catch {}
-  }
-  return !!teVerwijderen;
+  if (!GESCH_AAN) return false;
+  const lijst = await leesIndex(accountId);
+  const item = lijst.find(r => r.id === id);
+  if (!item) return false;
+  await schrijfIndex(accountId, lijst.filter(r => r.id !== id));
+  if (item.audio) { try { await fetch(objectUrl(item.audio), { method: 'DELETE', headers: supaHeaders() }); } catch {} }
+  return true;
 }
 
 async function wisAlles(accountId) {
-  try { await fsp.rm(accountMap(accountId), { recursive: true, force: true }); } catch (e) {
+  if (!GESCH_AAN) return;
+  try {
+    const lijst = await leesIndex(accountId);
+    for (const r of lijst) {
+      if (r.audio) { try { await fetch(objectUrl(r.audio), { method: 'DELETE', headers: supaHeaders() }); } catch {} }
+    }
+    try { await fetch(objectUrl(indexKey(accountId)), { method: 'DELETE', headers: supaHeaders() }); } catch {}
+  } catch (e) {
     console.error('[tolkagent] wissen geschiedenis mislukt:', e.message);
   }
 }
@@ -492,14 +537,13 @@ app.get('/geschiedenis/audio/:id', async (req, res) => {
   const id = req.params.id;
   if (!accountId || !veiligId(id)) return res.status(400).json({ error: 'Ongeldig verzoek.' });
   try {
-    const rijen = await leesGeschiedenis(accountId);
-    const item = rijen.find(r => r.id === id);
+    const item = await leesItem(accountId, id);
     if (!item || !item.audio) return res.status(404).json({ error: 'Geen audio gevonden.' });
-    const bestand = path.join(audioMap(accountId), item.audio);
-    if (!fs.existsSync(bestand)) return res.status(404).json({ error: 'Audiobestand weg.' });
+    const obj = await fetch(objectUrl(item.audio), { headers: supaHeaders() });
+    if (!obj.ok) return res.status(404).json({ error: 'Audiobestand weg.' });
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Disposition', `inline; filename="vertaling-${id}.mp3"`);
-    fs.createReadStream(bestand).pipe(res);
+    res.end(Buffer.from(await obj.arrayBuffer()));
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: e.message });
   }
@@ -556,5 +600,7 @@ app.listen(PORT, () => {
   console.log(`\n✓ Tolkagent draait op http://localhost:${PORT}`);
   console.log(`  Agent : ${AGENT_ID}`);
   console.log(`  Stem  : ${VOICE_ID}`);
-  console.log(`  STT   : ${STT_MODEL}  TTS: ${TTS_MODEL}\n`);
+  console.log(`  STT   : ${STT_MODEL}  TTS: ${TTS_MODEL}`);
+  console.log(`  Geschiedenis: ${GESCH_AAN ? 'Supabase-bucket ' + SUPABASE_BUCKET : 'UIT (geen SUPABASE_URL/KEY)'}\n`);
+  zorgBucket();
 });
