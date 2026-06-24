@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Tolk">
   <meta name="theme-color" content="#0d1117">
   <link rel="manifest" href="/manifest.json">
-  <title>Tolkagent · NL ↔ GR</title>
+  <title>Tolkagent · NL ↔ GR / FR</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -48,6 +48,29 @@
       padding: 26px;
       width: 100%;
       max-width: 560px;
+    }
+
+    .langsel {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .langbtn {
+      flex: 1;
+      padding: 11px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .langbtn.active {
+      border-color: var(--accent);
+      color: var(--text);
+      background: rgba(88,166,255,0.10);
     }
 
     .tabs {
@@ -184,11 +207,16 @@
 <body>
 
 <div class="header">
-  <h1>🇳🇱 &harr; 🇬🇷 &nbsp;Tolkagent</h1>
-  <p>Nederlands ↔ Grieks · audio in, audio uit · jouw stem</p>
+  <h1 id="kop">🇳🇱 &harr; 🇬🇷 &nbsp;Tolkagent</h1>
+  <p id="ondertitel">Nederlands ↔ Grieks · audio in, audio uit · jouw stem</p>
 </div>
 
 <div class="card">
+  <div class="langsel">
+    <button id="lang-el" class="langbtn active" onclick="setPartner('el')">🇬🇷&nbsp; Grieks</button>
+    <button id="lang-fr" class="langbtn"        onclick="setPartner('fr')">🇫🇷&nbsp; Frans</button>
+  </div>
+
   <div class="tabs">
     <button id="tab-bericht" class="tab active" onclick="setMode('bericht')">🎙&nbsp; Bericht</button>
     <button id="tab-live"    class="tab"        onclick="setMode('live')">📞&nbsp; Live gesprek</button>
@@ -261,7 +289,7 @@
   </div>
 </div>
 
-<p class="tip">Audio in jouw stem · spraakherkenning ElevenLabs Scribe · vertaling NL↔GR. Richting wordt automatisch herkend: spreek je Nederlands, dan hoor je Grieks; spreek je Grieks, dan hoor je Nederlands.</p>
+<p class="tip" id="tip">Audio in jouw stem · spraakherkenning ElevenLabs Scribe · vertaling NL↔Grieks. Richting wordt automatisch herkend: spreek je Nederlands, dan hoor je Grieks; spreek je Grieks, dan hoor je Nederlands.</p>
 
 <script type="module">
   import { Conversation } from 'https://esm.sh/@elevenlabs/client';
@@ -272,7 +300,60 @@
   let huidigAudioBlob = null;
   let huidigAudioUrl = null;
 
-  const taalNaam = { nl: 'Nederlands', el: 'Grieks' };
+  const taalNaam = { nl: 'Nederlands', el: 'Grieks', fr: 'Frans' };
+  const taalVlag = { nl: '🇳🇱', el: '🇬🇷', fr: '🇫🇷' };
+
+  // Gekozen partnertaal (de andere kant naast Nederlands). Standaard Grieks.
+  let partner = 'el';
+  // Welke partnertalen hebben een live-agent? Wordt van de server geladen.
+  let liveSupport = { el: true, fr: false };
+
+  // ─── PARTNERTAAL ─────────────────────────────────────────────────────────────
+  window.setPartner = function(p) {
+    partner = (p === 'fr') ? 'fr' : 'el';
+    document.getElementById('lang-el').classList.toggle('active', partner === 'el');
+    document.getElementById('lang-fr').classList.toggle('active', partner === 'fr');
+
+    const naam = taalNaam[partner];
+    document.getElementById('kop').innerHTML = '🇳🇱 &harr; ' + taalVlag[partner] + ' &nbsp;Tolkagent';
+    document.getElementById('ondertitel').textContent =
+      'Nederlands ↔ ' + naam + ' · audio in, audio uit · jouw stem';
+    document.getElementById('rec-status').textContent = 'Tik en spreek · Nederlands of ' + naam;
+    document.getElementById('tekst-invoer').placeholder = 'Typ Nederlands of ' + naam + '…';
+    document.getElementById('live-nl').textContent = 'Spreek Nederlands of ' + naam + '…';
+    document.getElementById('tip').textContent =
+      'Audio in jouw stem · spraakherkenning ElevenLabs Scribe · vertaling NL↔' + naam +
+      '. Richting wordt automatisch herkend: spreek je Nederlands, dan hoor je ' + naam +
+      '; spreek je ' + naam + ', dan hoor je Nederlands.';
+
+    // verberg een oud resultaat zodat de taal niet verwart
+    document.getElementById('bericht-result').style.display = 'none';
+    // stop een lopende live sessie bij taalwissel
+    if (conv) { conv.endSession().catch(() => {}); conv = null; setLiveState('stopped'); }
+    werkLiveBeschikbaarheidBij();
+  };
+
+  function werkLiveBeschikbaarheidBij() {
+    const stat = document.getElementById('live-status');
+    const btn  = document.getElementById('live-btn');
+    if (liveSupport[partner]) {
+      btn.style.opacity = '';
+      btn.style.pointerEvents = '';
+      if (!conv) stat.textContent = 'Tik om een live gesprek te starten';
+    } else {
+      btn.style.opacity = '0.4';
+      btn.style.pointerEvents = 'none';
+      stat.textContent = 'Live gesprek voor ' + taalNaam[partner] + ' is nog niet beschikbaar — gebruik Bericht of Tekst';
+    }
+  }
+
+  // Laad welke talen een live-agent hebben.
+  fetch('/talen').then(r => r.json()).then(d => {
+    if (d && Array.isArray(d.partners)) {
+      d.partners.forEach(p => { liveSupport[p.code] = !!p.live; });
+    }
+    werkLiveBeschikbaarheidBij();
+  }).catch(() => {});
 
   // ─── MODE ───────────────────────────────────────────────────────────────────
   window.setMode = function(mode) {
@@ -284,6 +365,7 @@
     // stop een lopende opname of live sessie bij wisselen
     if (!isBericht && mediaRecorder && mediaRecorder.state === 'recording') stopOpname();
     if (isBericht && conv) { conv.endSession().catch(() => {}); conv = null; setLiveState('stopped'); }
+    if (!isBericht) werkLiveBeschikbaarheidBij();
   };
 
   // ─── BERICHT: opnemen ─────────────────────────────────────────────────────────
@@ -350,7 +432,7 @@
     document.getElementById('vert-label').textContent = 'Vertaling (' + (taalNaam[naar] || naar) + ')';
     const vt = document.getElementById('vert-tekst');
     vt.textContent = vert || '(lege vertaling)';
-    vt.className = 'block-text' + (naar === 'el' ? ' gr' : '');
+    vt.className = 'block-text' + (naar !== 'nl' ? ' gr' : '');
 
     const audioBlob = await res.blob();
     huidigAudioBlob = audioBlob;
@@ -371,9 +453,10 @@
     try {
       const fd = new FormData();
       fd.append('audio', blob, filename);
+      fd.append('partner', partner);
       const res = await fetch('/tolk', { method: 'POST', body: fd });
       await toonResultaat(res, 'Herkend');
-      setRecState('', 'Tik en spreek · Nederlands of Grieks');
+      setRecState('', 'Tik en spreek · Nederlands of ' + taalNaam[partner]);
     } catch (e) {
       setRecState('error', 'Mislukt');
       fout.textContent = e.message;
@@ -394,7 +477,7 @@
       const res = await fetch('/tolk-tekst', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tekst })
+        body: JSON.stringify({ tekst, partner })
       });
       await toonResultaat(res, 'Tekst');
     } catch (e) {
@@ -443,9 +526,13 @@
 
   window.toggleLive = async function() {
     if (conv) { try { await conv.endSession(); } catch (_) {} conv = null; setLiveState('stopped'); return; }
+    if (!liveSupport[partner]) {
+      setLiveState('error', 'Live gesprek voor ' + taalNaam[partner] + ' is nog niet beschikbaar. Gebruik Bericht of Tekst.');
+      return;
+    }
     setLiveState('connecting');
     try {
-      const r = await fetch('/signed-url');
+      const r = await fetch('/signed-url?partner=' + encodeURIComponent(partner));
       if (!r.ok) throw new Error(await r.text());
       const { signed_url, error } = await r.json();
       if (error) throw new Error(error);
