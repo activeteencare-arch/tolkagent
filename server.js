@@ -11,6 +11,8 @@ require('dotenv').config();
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+const fsp = require('fs/promises');
 const { Readable } = require('stream');
 const crypto = require('crypto');
 
@@ -73,6 +75,15 @@ const AUTH_AAN = ACCOUNTS.length > 0;
 const tokenVoor = (u, p) => crypto.createHash('sha256').update(u + '|' + p + '|tolk-v1').digest('hex');
 const GELDIGE_TOKENS = new Set(ACCOUNTS.map(a => tokenVoor(a.user, a.password)));
 
+// Het auth-token is per account uniek en stabiel. We gebruiken het als anonieme
+// account-sleutel voor de opslag (geen e-mailadres in mappaden).
+function accountIdVan(req) {
+  const c = req.headers.cookie || '';
+  const m = c.match(/(?:^|;\s*)tolk_auth=([^;]+)/);
+  if (m && GELDIGE_TOKENS.has(m[1])) return m[1];
+  return null;
+}
+
 function cookieGeldig(req) {
   const c = req.headers.cookie || '';
   const m = c.match(/(?:^|;\s*)tolk_auth=([^;]+)/);
@@ -121,6 +132,80 @@ if (AUTH_AAN) {
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ── Vertaalgeschiedenis (per account, op de persistente schijf) ──
+// Opslag per account in een eigen map onder DATA_DIR. Metadata in een JSONL-log,
+// de audio als losse mp3's. DATA_DIR moet op een Railway-Volume staan, anders
+// is de geschiedenis weg bij een redeploy.
+const DATA_DIR  = process.env.DATA_DIR || '/data';
+const GESCH_DIR = path.join(DATA_DIR, 'geschiedenis');
+const veiligId  = id => /^[a-z0-9]+$/i.test(id || '');
+
+const accountMap   = id => path.join(GESCH_DIR, id);
+const logBestand   = id => path.join(accountMap(id), 'log.jsonl');
+const audioMap     = id => path.join(accountMap(id), 'audio');
+
+// Sla één vertaling op (metadata + optioneel de mp3). Mag de vertaling nooit breken.
+async function bewaarVertaling(accountId, rec, audioBuffer) {
+  if (!accountId) return null;
+  try {
+    await fsp.mkdir(audioMap(accountId), { recursive: true });
+    const id = Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
+    let audioBestand = null;
+    if (audioBuffer && audioBuffer.length) {
+      audioBestand = id + '.mp3';
+      await fsp.writeFile(path.join(audioMap(accountId), audioBestand), audioBuffer);
+    }
+    const regel = {
+      id,
+      ts: new Date().toISOString(),
+      van: rec.van, naar: rec.naar,
+      bron: rec.bron || '', vertaling: rec.vertaling || '',
+      audio: audioBestand
+    };
+    await fsp.appendFile(logBestand(accountId), JSON.stringify(regel) + '\n');
+    return id;
+  } catch (e) {
+    console.error('[tolkagent] opslaan geschiedenis mislukt:', e.message);
+    return null;
+  }
+}
+
+// Lees alle items van een account, nieuwste eerst.
+async function leesGeschiedenis(accountId) {
+  if (!accountId) return [];
+  try {
+    const tekst = await fsp.readFile(logBestand(accountId), 'utf8');
+    const rijen = tekst.split('\n').filter(Boolean)
+      .map(r => { try { return JSON.parse(r); } catch { return null; } })
+      .filter(Boolean);
+    rijen.reverse();
+    return rijen;
+  } catch (e) {
+    if (e.code === 'ENOENT') return [];
+    throw e;
+  }
+}
+
+async function verwijderItem(accountId, id) {
+  const rijen = await leesGeschiedenis(accountId);        // nieuwste eerst
+  const teVerwijderen = rijen.find(r => r.id === id);
+  const teHouden = rijen.filter(r => r.id !== id).reverse(); // terug naar chronologisch
+  const inhoud = teHouden.map(r => JSON.stringify(r)).join('\n');
+  await fsp.writeFile(logBestand(accountId), inhoud ? inhoud + '\n' : '');
+  if (teVerwijderen && teVerwijderen.audio) {
+    try { await fsp.unlink(path.join(audioMap(accountId), teVerwijderen.audio)); } catch {}
+  }
+  return !!teVerwijderen;
+}
+
+async function wisAlles(accountId) {
+  try { await fsp.rm(accountMap(accountId), { recursive: true, force: true }); } catch (e) {
+    console.error('[tolkagent] wissen geschiedenis mislukt:', e.message);
+  }
+}
+
+const TAAL_VOL = { nl: 'Nederlands', el: 'Grieks', fr: 'Frans' };
 
 // ── Vertaling ──
 // Primair de gratis Google-endpoint, met herhaalpogingen, en een reservedienst
@@ -330,11 +415,16 @@ app.post('/tolk', upload.single('audio'), async (req, res) => {
 
     // ── Stap 4: uitspreken in Michiels stem ──
     const tts = await spreekUit(vertaaldeTekst);
+    const audioBuf = Buffer.from(await tts.arrayBuffer());
+
+    // ── Stap 5: bewaren in de geschiedenis (mag de vertaling niet breken) ──
+    await bewaarVertaling(accountIdVan(req),
+      { van: vanTaal, naar: naarTaal, bron: bronTekst, vertaling: vertaaldeTekst }, audioBuf);
 
     // ── Antwoord: audio + transcripties in headers ──
     res.setHeader('Content-Type', 'audio/mpeg');
     zetTekstHeaders(res, bronTekst, vertaaldeTekst, vanTaal, naarTaal);
-    Readable.fromWeb(tts.body).pipe(res);
+    res.end(audioBuf);
 
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: e.message });
@@ -352,9 +442,12 @@ app.post('/tolk-tekst', async (req, res) => {
     const naarTaal = vanTaal === 'nl' ? partner : 'nl';
     const vertaaldeTekst = await vertaal(tekst, vanTaal, naarTaal);
     const tts = await spreekUit(vertaaldeTekst);
+    const audioBuf = Buffer.from(await tts.arrayBuffer());
+    await bewaarVertaling(accountIdVan(req),
+      { van: vanTaal, naar: naarTaal, bron: tekst, vertaling: vertaaldeTekst }, audioBuf);
     res.setHeader('Content-Type', 'audio/mpeg');
     zetTekstHeaders(res, tekst, vertaaldeTekst, vanTaal, naarTaal);
-    Readable.fromWeb(tts.body).pipe(res);
+    res.end(audioBuf);
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: e.message });
   }
@@ -376,6 +469,86 @@ app.post('/vertaal', async (req, res) => {
     Readable.fromWeb(tts.body).pipe(res);
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Geschiedenis: lijst van eigen vertalingen (nieuwste eerst) ──
+app.get('/geschiedenis', async (req, res) => {
+  try {
+    const rijen = await leesGeschiedenis(accountIdVan(req));
+    res.json({ items: rijen.map(r => ({
+      id: r.id, ts: r.ts, van: r.van, naar: r.naar,
+      vanNaam: TAAL_VOL[r.van] || r.van, naarNaam: TAAL_VOL[r.naar] || r.naar,
+      bron: r.bron, vertaling: r.vertaling, heeftAudio: !!r.audio
+    })) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Geschiedenis: audio van één item ophalen ──
+app.get('/geschiedenis/audio/:id', async (req, res) => {
+  const accountId = accountIdVan(req);
+  const id = req.params.id;
+  if (!accountId || !veiligId(id)) return res.status(400).json({ error: 'Ongeldig verzoek.' });
+  try {
+    const rijen = await leesGeschiedenis(accountId);
+    const item = rijen.find(r => r.id === id);
+    if (!item || !item.audio) return res.status(404).json({ error: 'Geen audio gevonden.' });
+    const bestand = path.join(audioMap(accountId), item.audio);
+    if (!fs.existsSync(bestand)) return res.status(404).json({ error: 'Audiobestand weg.' });
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Disposition', `inline; filename="vertaling-${id}.mp3"`);
+    fs.createReadStream(bestand).pipe(res);
+  } catch (e) {
+    if (!res.headersSent) res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Geschiedenis: alles downloaden als .txt of .csv ──
+app.get('/geschiedenis/download', async (req, res) => {
+  try {
+    const rijen = (await leesGeschiedenis(accountIdVan(req))).slice().reverse(); // chronologisch
+    const formaat = (req.query.formaat || 'txt').toLowerCase();
+    const stempel = new Date().toISOString().slice(0, 10);
+    if (formaat === 'csv') {
+      const esc = s => '"' + String(s || '').replace(/"/g, '""') + '"';
+      const regels = [['datum', 'van', 'naar', 'brontekst', 'vertaling'].join(',')];
+      for (const r of rijen) regels.push([r.ts, TAAL_VOL[r.van] || r.van, TAAL_VOL[r.naar] || r.naar, r.bron, r.vertaling].map(esc).join(','));
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="tolk-geschiedenis-${stempel}.csv"`);
+      return res.send('﻿' + regels.join('\r\n'));
+    }
+    const blokken = rijen.map(r => {
+      const d = new Date(r.ts).toLocaleString('nl-NL');
+      return `[${d}]  ${TAAL_VOL[r.van] || r.van} → ${TAAL_VOL[r.naar] || r.naar}\n${TAAL_VOL[r.van] || r.van}: ${r.bron}\n${TAAL_VOL[r.naar] || r.naar}: ${r.vertaling}`;
+    });
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="tolk-geschiedenis-${stempel}.txt"`);
+    res.send(blokken.join('\n\n────────────────────\n\n'));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Geschiedenis: alles wissen (let op: vóór de :id-route) ──
+app.delete('/geschiedenis', async (req, res) => {
+  const accountId = accountIdVan(req);
+  if (!accountId) return res.status(400).json({ error: 'Niet ingelogd.' });
+  await wisAlles(accountId);
+  res.json({ ok: true });
+});
+
+// ── Geschiedenis: één item wissen ──
+app.delete('/geschiedenis/:id', async (req, res) => {
+  const accountId = accountIdVan(req);
+  const id = req.params.id;
+  if (!accountId || !veiligId(id)) return res.status(400).json({ error: 'Ongeldig verzoek.' });
+  try {
+    const gevonden = await verwijderItem(accountId, id);
+    res.json({ ok: gevonden });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 
