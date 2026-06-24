@@ -29,6 +29,82 @@ if (!API_KEY || !AGENT_ID || !VOICE_ID) {
   process.exit(1);
 }
 
+// ── Gratis tekstdemo (geen ElevenLabs, geen credits, geen login) ──
+// Voor de bewijspagina: typ tekst in, krijg de vertaling terug. Alleen de gratis
+// vertaaldienst, geen spraak. Bewust vóór de eventuele login-muur geregistreerd,
+// zodat een uitgelogde bezoeker dit altijd kan openen. Roept vertaal() pas bij een
+// verzoek aan; die functie is dan al geladen.
+function demoPagina() {
+  return `<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d1117"><title>Tolk · tekstdemo (NL ↔ GR)</title>
+<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#0d1117;color:#c9d1d9;font-family:-apple-system,'Segoe UI',system-ui,sans-serif;padding:24px;display:flex;justify-content:center}
+.wrap{width:100%;max-width:520px}
+h1{font-size:22px;margin:8px 0 4px;text-align:center}
+.sub{color:#8b949e;font-size:14px;margin:0 0 20px;text-align:center}
+.card{background:#161b22;border:1px solid #30363d;border-radius:16px;padding:20px}
+textarea{width:100%;min-height:110px;padding:12px;background:#0d1117;border:1px solid #30363d;border-radius:10px;color:#c9d1d9;font-size:16px;resize:vertical;font-family:inherit}
+button{width:100%;margin-top:14px;padding:12px;background:#58a6ff;color:#0d1117;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer}
+button:disabled{opacity:.6;cursor:default}
+.status{color:#8b949e;font-size:13px;margin-top:12px;min-height:18px;text-align:center}
+.out{margin-top:16px;padding:14px;background:#0d1117;border:1px solid #30363d;border-radius:10px}
+.label{color:#8b949e;font-size:12px;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+#out{font-size:18px;line-height:1.4;white-space:pre-wrap}
+.note{color:#8b949e;font-size:12px;margin:18px 4px 0;line-height:1.5;text-align:center}</style></head>
+<body><main class="wrap">
+<h1>🇳🇱 ↔ 🇬🇷 Tolk · tekstdemo</h1>
+<p class="sub">Typ Nederlands of Grieks. De richting wordt automatisch herkend.</p>
+<div class="card">
+<textarea id="in" placeholder="Typ Nederlands of Grieks..." maxlength="500"></textarea>
+<button id="go">Vertaal</button>
+<div id="status" class="status"></div>
+<div id="outWrap" class="out" hidden><div class="label" id="outLabel"></div><div id="out"></div></div>
+</div>
+<p class="note">Dit is de gratis tekstdemo. De echte tolk verstaat en spreekt ook, in een echte stem, en werkt met gesproken berichten (ook WhatsApp). Gemaakt door SkillOpsAI.</p>
+</main>
+<script>
+var inEl=document.getElementById('in');
+var out=document.getElementById('out');
+var outWrap=document.getElementById('outWrap');
+var outLabel=document.getElementById('outLabel');
+var statusEl=document.getElementById('status');
+var btn=document.getElementById('go');
+function doeVertaal(){
+  var tekst=inEl.value.trim();
+  if(!tekst){inEl.focus();return;}
+  btn.disabled=true;statusEl.textContent='Bezig met vertalen...';outWrap.hidden=true;
+  fetch('/demo-vertaal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tekst:tekst})})
+    .then(function(r){return r.json().then(function(d){return {ok:r.ok,d:d};});})
+    .then(function(res){
+      if(!res.ok){throw new Error(res.d.error||'Er ging iets mis.');}
+      outLabel.textContent=(res.d.vanTaal==='el'?'Grieks → Nederlands':'Nederlands → Grieks');
+      out.textContent=res.d.vertaald;
+      outWrap.hidden=false;statusEl.textContent='';
+    })
+    .catch(function(e){statusEl.textContent=e.message;})
+    .then(function(){btn.disabled=false;});
+}
+btn.addEventListener('click',doeVertaal);
+inEl.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){doeVertaal();}});
+</script>
+</body></html>`;
+}
+app.get('/demo', (req, res) => res.type('html').send(demoPagina()));
+app.post('/demo-vertaal', async (req, res) => {
+  const tekst = (req.body.tekst || '').trim();
+  if (!tekst) return res.status(400).json({ error: 'Geen tekst meegegeven.' });
+  if (tekst.length > 500) return res.status(400).json({ error: 'Tekst te lang voor de demo (max 500 tekens).' });
+  try {
+    const grieks = /[Ͱ-Ͽ]/.test(tekst);
+    const vanTaal  = grieks ? 'el' : 'nl';
+    const naarTaal = grieks ? 'nl' : 'el';
+    const vertaaldeTekst = await vertaal(tekst, vanTaal, naarTaal);
+    res.json({ bron: tekst, vertaald: vertaaldeTekst, vanTaal, naarTaal });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Toegangsbeveiliging: de tolk privé houden (cookie-login) ──
 // Bewust GEEN Basic Auth: dat geeft een zwart scherm in een iOS-webapp op het
 // beginscherm. Een inlogpagina die een cookie zet werkt daar wél, en de cookie
