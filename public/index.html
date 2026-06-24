@@ -202,6 +202,36 @@
     }
 
     .tip { font-size: 12px; color: var(--muted); text-align: center; margin-top: 18px; max-width: 560px; line-height: 1.5; }
+
+    .gesch-acties { display: flex; gap: 8px; flex-wrap: wrap; }
+    .gesch-acties .btn { flex: 1; min-width: 120px; text-decoration: none; text-align: center; line-height: 1.4; }
+    .btn.secondary.gevaar { color: var(--red); border-color: rgba(248,81,73,0.35); }
+
+    .gesch-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 15px;
+      margin-bottom: 12px;
+    }
+    .gesch-kop {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; margin-bottom: 10px;
+    }
+    .gesch-richting { font-size: 12px; font-weight: 600; color: var(--accent); }
+    .gesch-datum { font-size: 11px; color: var(--muted); }
+    .gesch-regel { font-size: 14px; line-height: 1.5; margin-bottom: 6px; }
+    .gesch-regel .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); display: block; margin-bottom: 2px; }
+    .gesch-regel.vert { color: var(--gr-blue); }
+    .gesch-knoppen { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .mini {
+      font-size: 12px; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+      background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    }
+    .mini.rood { color: var(--red); border-color: rgba(248,81,73,0.35); }
+    .mini:hover { border-color: var(--accent); }
+    .gesch-item audio { margin-top: 10px; }
+    .gesch-leeg { color: var(--muted); font-size: 14px; text-align: center; padding: 20px 0; }
   </style>
 </head>
 <body>
@@ -218,8 +248,9 @@
   </div>
 
   <div class="tabs">
-    <button id="tab-bericht" class="tab active" onclick="setMode('bericht')">🎙&nbsp; Bericht</button>
-    <button id="tab-live"    class="tab"        onclick="setMode('live')">📞&nbsp; Live gesprek</button>
+    <button id="tab-bericht"      class="tab active" onclick="setMode('bericht')">🎙&nbsp; Bericht</button>
+    <button id="tab-live"         class="tab"        onclick="setMode('live')">📞&nbsp; Live</button>
+    <button id="tab-geschiedenis" class="tab"        onclick="setMode('geschiedenis')">🗂&nbsp; Geschiedenis</button>
   </div>
 
   <!-- ── BERICHT-MODUS (opnemen of uploaden -> vertalen -> audio + delen) ── -->
@@ -286,6 +317,18 @@
       <div class="block-text gr" id="live-gr">De vertaling verschijnt hier.</div>
     </div>
     <div class="fout" id="live-fout"></div>
+  </div>
+
+  <!-- ── GESCHIEDENIS-MODUS (opgeslagen vertalingen teruglezen / kopiëren / downloaden) ── -->
+  <div id="mode-geschiedenis" style="display:none">
+    <div class="gesch-acties">
+      <a class="btn secondary" id="dl-txt" href="/geschiedenis/download?formaat=txt" download>⬇ Alles (.txt)</a>
+      <a class="btn secondary" id="dl-csv" href="/geschiedenis/download?formaat=csv" download>⬇ Alles (.csv)</a>
+      <button class="btn secondary gevaar" onclick="wisAlleGeschiedenis()">🗑 Wis alles</button>
+    </div>
+    <div id="gesch-status" class="status-text" style="margin:14px 0">Laden…</div>
+    <div id="gesch-lijst"></div>
+    <div class="fout" id="gesch-fout"></div>
   </div>
 </div>
 
@@ -357,15 +400,114 @@
 
   // ─── MODE ───────────────────────────────────────────────────────────────────
   window.setMode = function(mode) {
-    const isBericht = mode === 'bericht';
-    document.getElementById('mode-bericht').style.display = isBericht ? '' : 'none';
-    document.getElementById('mode-live').style.display    = isBericht ? 'none' : '';
-    document.getElementById('tab-bericht').classList.toggle('active',  isBericht);
-    document.getElementById('tab-live').classList.toggle('active',    !isBericht);
+    const modi = ['bericht', 'live', 'geschiedenis'];
+    if (!modi.includes(mode)) mode = 'bericht';
+    for (const m of modi) {
+      document.getElementById('mode-' + m).style.display = (m === mode) ? '' : 'none';
+      document.getElementById('tab-' + m).classList.toggle('active', m === mode);
+    }
     // stop een lopende opname of live sessie bij wisselen
-    if (!isBericht && mediaRecorder && mediaRecorder.state === 'recording') stopOpname();
-    if (isBericht && conv) { conv.endSession().catch(() => {}); conv = null; setLiveState('stopped'); }
-    if (!isBericht) werkLiveBeschikbaarheidBij();
+    if (mode !== 'bericht' && mediaRecorder && mediaRecorder.state === 'recording') stopOpname();
+    if (mode !== 'live' && conv) { conv.endSession().catch(() => {}); conv = null; setLiveState('stopped'); }
+    if (mode === 'live') werkLiveBeschikbaarheidBij();
+    if (mode === 'geschiedenis') laadGeschiedenis();
+  };
+
+  // ─── GESCHIEDENIS ─────────────────────────────────────────────────────────────
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  let geschTekst = {}; // id -> tekst om te kopiëren (bron → vertaling)
+
+  window.laadGeschiedenis = async function() {
+    const status = document.getElementById('gesch-status');
+    const lijst  = document.getElementById('gesch-lijst');
+    const fout   = document.getElementById('gesch-fout');
+    fout.style.display = 'none';
+    status.textContent = 'Laden…';
+    lijst.innerHTML = '';
+    try {
+      const r = await fetch('/geschiedenis');
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Laden mislukt');
+      const { items } = await r.json();
+      geschTekst = {};
+      items.forEach(it => { geschTekst[it.id] = it.bron + '  →  ' + it.vertaling; });
+      if (!items || !items.length) {
+        status.textContent = '';
+        lijst.innerHTML = '<div class="gesch-leeg">Nog geen vertalingen bewaard. Zodra je iets vertaalt, verschijnt het hier.</div>';
+        return;
+      }
+      status.textContent = items.length + (items.length === 1 ? ' bewaarde vertaling' : ' bewaarde vertalingen');
+      lijst.innerHTML = items.map(renderItem).join('');
+    } catch (e) {
+      status.textContent = '';
+      fout.textContent = e.message;
+      fout.style.display = 'block';
+    }
+  };
+
+  function renderItem(it) {
+    const datum = new Date(it.ts).toLocaleString('nl-NL', { dateStyle: 'medium', timeStyle: 'short' });
+    const audio = it.heeftAudio
+      ? `<audio controls preload="none" src="/geschiedenis/audio/${encodeURIComponent(it.id)}"></audio>`
+      : '';
+    return `
+      <div class="gesch-item" data-id="${escapeHtml(it.id)}">
+        <div class="gesch-kop">
+          <span class="gesch-richting">${escapeHtml(it.vanNaam)} → ${escapeHtml(it.naarNaam)}</span>
+          <span class="gesch-datum">${escapeHtml(datum)}</span>
+        </div>
+        <div class="gesch-regel"><span class="lbl">${escapeHtml(it.vanNaam)}</span>${escapeHtml(it.bron)}</div>
+        <div class="gesch-regel vert"><span class="lbl">${escapeHtml(it.naarNaam)}</span>${escapeHtml(it.vertaling)}</div>
+        ${audio}
+        <div class="gesch-knoppen">
+          <button class="mini" onclick="kopieer(this, '${escapeHtml(it.id)}')">📋 Kopieer</button>
+          <button class="mini rood" onclick="verwijderItem('${escapeHtml(it.id)}')">🗑 Verwijder</button>
+        </div>
+      </div>`;
+  }
+
+  window.kopieer = async function(btn, id) {
+    const tekst = geschTekst[id] || '';
+    const klaar = () => { btn.textContent = '✓ Gekopieerd'; setTimeout(() => { btn.textContent = '📋 Kopieer'; }, 1500); };
+    try {
+      await navigator.clipboard.writeText(tekst);
+      klaar();
+    } catch (e) {
+      // fallback: selecteer via een tijdelijk veld
+      const ta = document.createElement('textarea');
+      ta.value = tekst; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); } catch (_) {}
+      document.body.removeChild(ta);
+      klaar();
+    }
+  };
+
+  window.verwijderItem = async function(id) {
+    if (!confirm('Deze vertaling verwijderen?')) return;
+    try {
+      const r = await fetch('/geschiedenis/' + encodeURIComponent(id), { method: 'DELETE' });
+      if (!r.ok) throw new Error('Verwijderen mislukt');
+      laadGeschiedenis();
+    } catch (e) {
+      const fout = document.getElementById('gesch-fout');
+      fout.textContent = e.message; fout.style.display = 'block';
+    }
+  };
+
+  window.wisAlleGeschiedenis = async function() {
+    if (!confirm('Wil je je hele vertaalgeschiedenis wissen? Dit kan niet ongedaan worden gemaakt.')) return;
+    try {
+      const r = await fetch('/geschiedenis', { method: 'DELETE' });
+      if (!r.ok) throw new Error('Wissen mislukt');
+      laadGeschiedenis();
+    } catch (e) {
+      const fout = document.getElementById('gesch-fout');
+      fout.textContent = e.message; fout.style.display = 'block';
+    }
   };
 
   // ─── BERICHT: opnemen ─────────────────────────────────────────────────────────
